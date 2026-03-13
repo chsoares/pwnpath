@@ -45,5 +45,5 @@
       }
     }
   ],
-  "entryRecommendation": "Start with **OpTinselTrace-1** if you're new to PCAP analysis. If you're already comfortable with Wireshark basics, you can jump to **Brutus** for a more focused challenge."
+  "entryRecommendation": "Start with **Origins** if you're new to PCAP analysis — it covers FTP traffic in plaintext, so you can focus on learning Wireshark without protocol complexity. If you already know the basics, skip ahead to **Noxious** to dive into Active Directory attacks and NTLM hash extraction."
 }
