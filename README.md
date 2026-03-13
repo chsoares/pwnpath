@@ -50,7 +50,8 @@ content/
 | Disk & Filesystem Forensics | Coming Soon | — |
 | Log Analysis & SIEM | Coming Soon | — |
 | Malware Analysis | Coming Soon | — |
-| Incident Response | Coming Soon | — |
+| Reverse Engineering | Coming Soon | — |
+| Binary Exploitation | Coming Soon | — |
 
 ## License
 

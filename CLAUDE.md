@@ -3,6 +3,15 @@
 ## What is PwnPath?
 A static web application that curates HackTheBox challenges/Sherlocks into progressive learning trails organized by topic. Built with Next.js 15 (static export), Tailwind CSS 4, TypeScript.
 
+## Categories (7 total)
+1. **Network Forensics (PCAP)** — Wireshark, tshark, traffic analysis
+2. **Memory Forensics** — Volatility, process analysis, memory artifacts
+3. **Disk & Filesystem Forensics** — Autopsy, FTK, registry, event logs
+4. **Log Analysis & SIEM** — ELK, Splunk, log correlation, detection rules
+5. **Malware Analysis** — Static/dynamic analysis, behavioral analysis
+6. **Reverse Engineering** — Ghidra, IDA, decompilation, assembly
+7. **Binary Exploitation** — Buffer overflow, ROP, heap, pwntools
+
 ## Project Structure
 - `content/` — All learning content as JSON files (read at build time)
 - `src/app/` — Next.js App Router pages

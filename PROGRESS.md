@@ -26,7 +26,8 @@
 - [ ] Disk & Filesystem Forensics category (target: 10+ challenges)
 - [ ] Log Analysis & SIEM category (target: 10+ challenges)
 - [ ] Malware Analysis category (target: 10+ challenges)
-- [ ] Incident Response category (target: 10+ challenges)
+- [ ] Reverse Engineering category (target: 10+ challenges)
+- [ ] Binary Exploitation category (target: 15-20+ challenges)
 - [ ] Remove ComingSoon overlays as categories are populated
 - [ ] Final build + deploy
 

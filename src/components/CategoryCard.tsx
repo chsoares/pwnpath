@@ -9,7 +9,8 @@ const iconMap: Record<string, string> = {
   disk: "💾",
   logs: "📋",
   malware: "🦠",
-  incident: "🚨",
+  reverse: "🔬",
+  exploit: "💥",
 };
 
 export default function CategoryCard({

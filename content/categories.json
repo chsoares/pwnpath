@@ -43,16 +43,25 @@
       "icon": "malware",
       "status": "coming_soon",
       "challengeCount": 0,
-      "focus": ["Static Analysis", "Dynamic Analysis", "Reverse Engineering"]
+      "focus": ["Static Analysis", "Dynamic Analysis", "Behavioral Analysis"]
     },
     {
-      "id": "incident-response",
-      "name": "Incident Response",
-      "description": "End-to-end incident response scenarios combining multiple forensic disciplines. Practice triage, containment, eradication, and reporting.",
-      "icon": "incident",
+      "id": "reverse-engineering",
+      "name": "Reverse Engineering",
+      "description": "Disassemble and decompile binaries to understand their behavior. Master tools like Ghidra, IDA, and radare2 to analyze compiled code and uncover hidden logic.",
+      "icon": "reverse",
       "status": "coming_soon",
       "challengeCount": 0,
-      "focus": ["Triage", "Timeline Analysis", "Reporting", "Containment"]
+      "focus": ["Ghidra", "IDA", "Decompilation", "Assembly"]
+    },
+    {
+      "id": "binary-exploitation",
+      "name": "Binary Exploitation",
+      "description": "Exploit software vulnerabilities through buffer overflows, ROP chains, heap manipulation, and format string attacks. Learn to bypass modern protections like ASLR, NX, and stack canaries.",
+      "icon": "exploit",
+      "status": "coming_soon",
+      "challengeCount": 0,
+      "focus": ["Buffer Overflow", "ROP Chains", "Heap Exploitation", "pwntools"]
     }
   ]
 }
