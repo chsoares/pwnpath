@@ -7,28 +7,36 @@ export default function CheatsheetsIndex() {
 
   return (
     <div>
-      <h1 className="mb-3 text-3xl font-bold tracking-tight">
-        <span className="text-emerald-400">Cheatsheets</span>
+      <div className="mb-3 flex items-center gap-2 text-sm text-drac-muted">
+        <span className="text-drac-green">root@pwnpath</span>
+        <span>:~$</span>
+        <span className="text-drac-fg">man --list</span>
+      </div>
+      <h1 className="mb-3 text-3xl font-bold tracking-tight text-drac-fg">
+        <span className="text-drac-purple">Cheatsheets</span>
       </h1>
-      <p className="mb-8 text-zinc-400">
-        Quick command references for each forensics discipline.
+      <p className="mb-8 text-sm text-drac-muted">
+        Quick command references for each discipline. RTFM.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         {available.map((cat) => (
           <Link
             key={cat.id}
             href={`/cheatsheets/${cat.id}`}
-            className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 transition-all hover:border-zinc-600 hover:bg-zinc-800/50"
+            className="rounded-lg border border-drac-border bg-drac-bg p-6 transition-all hover:border-drac-purple/50 hover:bg-drac-hover"
           >
-            <h2 className="mb-1 font-semibold text-zinc-100">{cat.name}</h2>
-            <p className="text-sm text-zinc-400">
-              Command references for {cat.focus.join(", ")}
+            <h2 className="mb-1 flex items-center gap-2 font-semibold text-drac-fg">
+              <span className="material-symbols-outlined text-base text-drac-cyan">terminal</span>
+              {cat.name}
+            </h2>
+            <p className="text-sm text-drac-muted">
+              $ man {cat.focus.join(" ")}
             </p>
           </Link>
         ))}
       </div>
       {available.length === 0 && (
-        <p className="text-zinc-500">No cheatsheets available yet.</p>
+        <p className="text-drac-muted">// no cheatsheets available yet</p>
       )}
     </div>
   );

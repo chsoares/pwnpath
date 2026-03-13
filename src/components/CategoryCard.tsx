@@ -4,13 +4,13 @@ import ComingSoon from "./ComingSoon";
 import ProgressBar from "./ProgressBar";
 
 const iconMap: Record<string, string> = {
-  network: "🌐",
-  memory: "🧠",
-  disk: "💾",
-  logs: "📋",
-  malware: "🦠",
-  reverse: "🔬",
-  exploit: "💥",
+  network: "lan",
+  memory: "memory",
+  disk: "storage",
+  logs: "query_stats",
+  malware: "bug_report",
+  reverse: "build",
+  exploit: "bolt",
 };
 
 export default function CategoryCard({
@@ -19,23 +19,27 @@ export default function CategoryCard({
   category: CategorySummary;
 }) {
   const isAvailable = category.status === "available";
-  const icon = iconMap[category.icon] ?? "📁";
+  const icon = iconMap[category.icon] ?? "folder";
 
   const card = (
-    <div className="group relative flex flex-col rounded-xl border border-zinc-800 bg-zinc-900 p-6 transition-all hover:border-zinc-600 hover:bg-zinc-800/50">
+    <div className="group relative flex flex-col rounded-lg border border-drac-border bg-drac-bg p-5 transition-all hover:border-drac-purple/50 hover:bg-drac-hover">
       {!isAvailable && <ComingSoon />}
-      <div className="mb-3 text-3xl">{icon}</div>
-      <h2 className="mb-2 text-lg font-semibold text-zinc-100">
-        {category.name}
-      </h2>
-      <p className="mb-4 flex-1 text-sm leading-relaxed text-zinc-400">
+      <div className="mb-3 flex items-center gap-3">
+        <span className="material-symbols-outlined text-2xl text-drac-cyan">
+          {icon}
+        </span>
+        <h2 className="text-base font-semibold text-drac-fg">
+          {category.name}
+        </h2>
+      </div>
+      <p className="mb-4 flex-1 text-sm leading-relaxed text-drac-muted">
         {category.description}
       </p>
       <div className="flex flex-wrap gap-1.5">
         {category.focus.map((f) => (
           <span
             key={f}
-            className="rounded-md bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400"
+            className="rounded border border-drac-border bg-drac-surface/50 px-2 py-0.5 text-xs text-drac-orange"
           >
             {f}
           </span>

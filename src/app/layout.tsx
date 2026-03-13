@@ -1,22 +1,11 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "PwnPath — Structured DFIR Learning Trails",
+  title: "PwnPath // Structured Hacking Trails",
   description:
-    "Curated HackTheBox challenges organized into progressive learning paths for defensive security and digital forensics.",
+    "Curated HackTheBox challenges organized into progressive learning paths for offensive and defensive security.",
 };
 
 export default function RootLayout({
@@ -26,33 +15,54 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-zinc-950 font-sans text-zinc-100 antialiased`}
-      >
-        <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md">
-          <nav className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-            <Link href="/" className="text-lg font-bold tracking-tight">
-              <span className="text-emerald-400">Pwn</span>Path
+      <head>
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
+        />
+      </head>
+      <body className="min-h-screen font-mono antialiased">
+        <header className="sticky top-0 z-50 border-b border-drac-border bg-drac-bg2/90 backdrop-blur-md">
+          <nav className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
+            <Link href="/" className="flex items-center gap-2 text-sm font-bold tracking-tight">
+              <span className="flex gap-1.5">
+                <span className="inline-block h-3 w-3 rounded-full bg-drac-red" />
+                <span className="inline-block h-3 w-3 rounded-full bg-drac-yellow" />
+                <span className="inline-block h-3 w-3 rounded-full bg-drac-green" />
+              </span>
+              <span className="ml-2 text-drac-muted">root@</span>
+              <span className="text-drac-green">pwnpath</span>
+              <span className="text-drac-muted">:~$</span>
             </Link>
-            <div className="flex items-center gap-6 text-sm text-zinc-400">
+            <div className="flex items-center gap-5 text-sm text-drac-muted">
               <Link
                 href="/"
-                className="transition-colors hover:text-zinc-200"
+                className="flex items-center gap-1.5 transition-colors hover:text-drac-cyan"
               >
-                Trails
+                <span className="material-symbols-outlined text-base">route</span>
+                trails
               </Link>
               <Link
                 href="/cheatsheets"
-                className="transition-colors hover:text-zinc-200"
+                className="flex items-center gap-1.5 transition-colors hover:text-drac-cyan"
               >
-                Cheatsheets
+                <span className="material-symbols-outlined text-base">terminal</span>
+                cheatsheets
               </Link>
             </div>
           </nav>
         </header>
         <main className="mx-auto max-w-5xl px-6 py-10">{children}</main>
-        <footer className="border-t border-zinc-800 py-8 text-center text-xs text-zinc-500">
-          PwnPath — Structured learning paths for HackTheBox DFIR content
+        <footer className="border-t border-drac-border py-8 text-center text-xs text-drac-muted">
+          <span className="text-drac-green">root@pwnpath</span>
+          <span className="text-drac-muted">:~$ </span>
+          <span className="text-drac-fg/60">logout</span>
+          <span className="text-drac-muted"> // </span>
+          <span className="text-drac-fg/40">structured trails for HackTheBox</span>
         </footer>
       </body>
     </html>

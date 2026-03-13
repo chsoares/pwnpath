@@ -22,15 +22,15 @@ export default function ProgressBar({
 
   return (
     <div className="mt-4">
-      <div className="mb-1 flex items-center justify-between text-xs text-zinc-400">
+      <div className="mb-1 flex items-center justify-between text-xs text-drac-muted">
         <span>
-          {completed}/{total} completed
+          {completed}/{total} pwned
         </span>
         <span>{pct}%</span>
       </div>
-      <div className="h-1.5 w-full rounded-full bg-zinc-700">
+      <div className="h-1.5 w-full rounded-full bg-drac-surface">
         <div
-          className="h-1.5 rounded-full bg-emerald-500 transition-all duration-500"
+          className="h-1.5 rounded-full bg-drac-green transition-all duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>

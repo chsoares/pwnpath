@@ -19,27 +19,16 @@ export default function CompletionToggle({
   return (
     <button
       onClick={() => setDone(toggleCompleted(categoryId, challengeId))}
-      className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
+      className={`inline-flex items-center gap-2 rounded border px-4 py-2 text-sm font-medium transition-all ${
         done
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-          : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-600 hover:bg-zinc-700"
+          ? "border-drac-green/30 bg-drac-green/10 text-drac-green hover:bg-drac-green/20"
+          : "border-drac-border bg-drac-surface/50 text-drac-fg hover:border-drac-purple/50 hover:bg-drac-hover"
       }`}
     >
-      {done ? (
-        <>
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-          Completed
-        </>
-      ) : (
-        <>
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <circle cx="12" cy="12" r="10" />
-          </svg>
-          Mark as Complete
-        </>
-      )}
+      <span className="material-symbols-outlined text-base">
+        {done ? "check_circle" : "radio_button_unchecked"}
+      </span>
+      {done ? "pwned" : "mark as pwned"}
     </button>
   );
 }

@@ -26,17 +26,21 @@ export default function ChallengeStep({
       {/* Timeline line + node */}
       <div className="flex flex-col items-center">
         <div
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold ${
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded border-2 text-sm font-bold ${
             done
-              ? "border-emerald-500 bg-emerald-500/20 text-emerald-400"
-              : "border-zinc-600 bg-zinc-800 text-zinc-400"
+              ? "border-drac-green bg-drac-green/20 text-drac-green"
+              : "border-drac-surface bg-drac-bg text-drac-muted"
           }`}
         >
-          {done ? "✓" : challenge.position}
+          {done ? (
+            <span className="material-symbols-outlined text-base">check</span>
+          ) : (
+            challenge.position
+          )}
         </div>
         {!isLast && (
           <div
-            className={`w-0.5 flex-1 ${done ? "bg-emerald-500/40" : "bg-zinc-700"}`}
+            className={`w-0.5 flex-1 ${done ? "bg-drac-green/40" : "bg-drac-border"}`}
           />
         )}
       </div>
@@ -44,17 +48,18 @@ export default function ChallengeStep({
       {/* Content */}
       <Link
         href={`/${categoryId}/${challenge.challengeId}`}
-        className="group mb-8 flex-1 rounded-lg border border-zinc-800 bg-zinc-900 p-4 transition-all hover:border-zinc-600 hover:bg-zinc-800/50"
+        className="group mb-8 flex-1 rounded-lg border border-drac-border bg-drac-bg p-4 transition-all hover:border-drac-purple/50 hover:bg-drac-hover"
       >
         <div className="mb-1 flex items-center gap-3">
-          <h3 className="font-semibold text-zinc-100 group-hover:text-white">
+          <h3 className="text-sm font-semibold text-drac-fg group-hover:text-drac-cyan">
             {challenge.name}
           </h3>
           <DifficultyBadge difficulty={challenge.difficulty} />
         </div>
-        <p className="mb-2 text-sm text-zinc-400">{challenge.keyTakeaway}</p>
-        <span className="text-xs text-zinc-500">
-          ⏱ {challenge.estimatedTime}
+        <p className="mb-2 text-sm text-drac-muted">{challenge.keyTakeaway}</p>
+        <span className="flex items-center gap-1 text-xs text-drac-muted/70">
+          <span className="material-symbols-outlined text-sm">schedule</span>
+          {challenge.estimatedTime}
         </span>
       </Link>
     </div>

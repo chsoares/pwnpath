@@ -22,25 +22,18 @@ export default async function CheatsheetPage({
     <div>
       <Link
         href="/cheatsheets"
-        className="mb-6 inline-flex items-center gap-1 text-sm text-zinc-500 transition-colors hover:text-zinc-300"
+        className="mb-6 inline-flex items-center gap-1.5 text-sm text-drac-muted transition-colors hover:text-drac-cyan"
       >
-        <svg
-          className="h-4 w-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M15 19l-7-7 7-7"
-          />
-        </svg>
-        All Cheatsheets
+        <span className="material-symbols-outlined text-base">arrow_back</span>
+        cd ..
       </Link>
 
-      <h1 className="mb-8 text-3xl font-bold tracking-tight">
+      <div className="mb-3 flex items-center gap-2 text-sm text-drac-muted">
+        <span className="text-drac-green">root@pwnpath</span>
+        <span>:~$</span>
+        <span className="text-drac-fg">man {category}</span>
+      </div>
+      <h1 className="mb-8 text-3xl font-bold tracking-tight text-drac-fg">
         {cheatsheet.title}
       </h1>
 

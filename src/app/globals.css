@@ -3,18 +3,100 @@
 @plugin "@tailwindcss/typography";
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --bg-primary: #282a36;
+  --bg-secondary: #1e1f29;
+  --bg-surface: #44475a;
+  --bg-hover: #3a3d4e;
+  --fg: #f8f8f2;
+  --fg-muted: #6272a4;
+  --accent-cyan: #8be9fd;
+  --accent-green: #50fa7b;
+  --accent-orange: #ffb86c;
+  --accent-pink: #ff79c6;
+  --accent-purple: #bd93f9;
+  --accent-red: #ff5555;
+  --accent-yellow: #f1fa8c;
+  --border: #44475a;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-drac-bg: var(--bg-primary);
+  --color-drac-bg2: var(--bg-secondary);
+  --color-drac-surface: var(--bg-surface);
+  --color-drac-hover: var(--bg-hover);
+  --color-drac-fg: var(--fg);
+  --color-drac-muted: var(--fg-muted);
+  --color-drac-cyan: var(--accent-cyan);
+  --color-drac-green: var(--accent-green);
+  --color-drac-orange: var(--accent-orange);
+  --color-drac-pink: var(--accent-pink);
+  --color-drac-purple: var(--accent-purple);
+  --color-drac-red: var(--accent-red);
+  --color-drac-yellow: var(--accent-yellow);
+  --color-drac-border: var(--border);
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg-secondary);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  background-image:
+    linear-gradient(rgba(139, 233, 253, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 233, 253, 0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* CRT scanline overlay */
+body::after {
+  content: "";
+  display: block;
+  position: fixed;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background:
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.04) 50%);
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Blinking cursor for terminal prompts */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.cursor-blink::after {
+  content: "_";
+  animation: blink 1s step-end infinite;
+  color: var(--accent-green);
+  font-weight: bold;
+}
+
+/* Selection */
+::selection {
+  background: rgba(189, 147, 249, 0.3);
+  color: var(--fg);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-surface);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-muted);
+}
+
+/* Material Icons sizing */
+.material-icons-outlined {
+  font-size: inherit;
+  vertical-align: middle;
 }

@@ -7,10 +7,15 @@ export default function Home() {
   return (
     <div>
       <div className="mb-10">
-        <h1 className="mb-3 text-3xl font-bold tracking-tight">
-          Learning <span className="text-emerald-400">Trails</span>
+        <div className="mb-3 flex items-center gap-2 text-sm text-drac-muted">
+          <span className="text-drac-green">root@pwnpath</span>
+          <span>:~$</span>
+          <span className="text-drac-fg">ls ./trails/</span>
+        </div>
+        <h1 className="mb-3 text-3xl font-bold tracking-tight text-drac-fg">
+          Learning <span className="text-drac-purple">Trails</span>
         </h1>
-        <p className="max-w-2xl text-zinc-400">
+        <p className="max-w-2xl text-sm text-drac-muted">
           Progressive learning paths through HackTheBox challenges and
           Sherlocks. Each trail builds skills from fundamentals to advanced
           topics, with structured lessons, hints, and walkthroughs.
