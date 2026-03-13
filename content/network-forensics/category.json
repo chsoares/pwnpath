@@ -1,0 +1,49 @@
+{
+  "id": "network-forensics",
+  "name": "Network Forensics (PCAP)",
+  "overview": "Network forensics is the capture, recording, and analysis of network traffic to discover the source of security attacks or other incidents. In this learning path, you'll progress from basic packet capture analysis to advanced protocol dissection and attack reconstruction.\n\nYou'll work with real-world scenarios from HackTheBox Sherlocks and Challenges, building practical skills that translate directly to SOC analyst and incident responder roles.",
+  "prerequisites": [
+    "Basic understanding of TCP/IP networking (OSI model, common protocols)",
+    "Familiarity with command-line interfaces",
+    "A HackTheBox account (free tier is sufficient for most challenges)"
+  ],
+  "coreTools": [
+    {
+      "name": "Wireshark",
+      "description": "GUI-based packet analyzer — the gold standard for interactive PCAP analysis",
+      "installCommands": {
+        "linux": "sudo apt install wireshark / yay -S wireshark-qt",
+        "macos": "brew install --cask wireshark",
+        "windows": "Download from wireshark.org"
+      }
+    },
+    {
+      "name": "tshark",
+      "description": "Command-line packet analyzer — Wireshark's CLI counterpart for scripting and automation",
+      "installCommands": {
+        "linux": "Included with Wireshark installation",
+        "macos": "Included with Wireshark installation",
+        "windows": "Included with Wireshark installation"
+      }
+    },
+    {
+      "name": "NetworkMiner",
+      "description": "Network forensic analysis tool for extracting files, images, and credentials from PCAP files",
+      "installCommands": {
+        "linux": "Download from netresec.com (requires Mono)",
+        "macos": "Download from netresec.com (requires Mono)",
+        "windows": "Download from netresec.com"
+      }
+    },
+    {
+      "name": "Zeek (Bro)",
+      "description": "Network security monitor that generates high-level logs from packet captures",
+      "installCommands": {
+        "linux": "sudo apt install zeek / yay -S zeek",
+        "macos": "brew install zeek",
+        "windows": "Not natively supported — use WSL"
+      }
+    }
+  ],
+  "entryRecommendation": "Start with **OpTinselTrace-1** if you're new to PCAP analysis. If you're already comfortable with Wireshark basics, you can jump to **Brutus** for a more focused challenge."
+}

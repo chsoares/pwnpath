@@ -1,0 +1,105 @@
+{
+  "challengeId": "noxious",
+  "name": "Noxious",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Noxious",
+  "difficulty": "easy",
+  "estimatedTime": "1-2 hours",
+  "keyTakeaway": "LLMNR poisoning detection — extracting NTLMv2 hashes from network captures and understanding AD name resolution attacks",
+  "tags": ["wireshark", "llmnr", "ntlmv2", "active-directory", "responder", "smb"],
+  "fundamentals": {
+    "content": "## LLMNR Poisoning & Name Resolution Attacks\n\n### What is LLMNR?\n\n**Link-Local Multicast Name Resolution (LLMNR)** is a Windows protocol that resolves hostnames on the local network when DNS fails. When a user types a hostname that DNS can't resolve (e.g., a typo), Windows broadcasts an LLMNR query to all hosts on the subnet via multicast (UDP port 5355), essentially asking: *\"Does anyone know this hostname?\"*\n\nThe critical flaw: **any host can respond**, and there is no authentication or verification of the response.\n\n### How the Attack Works\n\n1. An attacker runs **Responder** (or similar tool) on the network, passively listening for LLMNR broadcasts\n2. A victim mistypes a hostname (e.g., `\\\\DCC01` instead of `\\\\DC01`)\n3. DNS lookup fails → Windows falls back to LLMNR broadcast\n4. The attacker responds: *\"I am that host, connect to me\"*\n5. The victim's machine automatically authenticates to the attacker via NTLM\n6. The attacker captures the **NetNTLMv2 hash** and cracks it offline\n\n### Key Protocols in This Challenge\n\n| Protocol | Port | What to Look For |\n|----------|------|------------------|\n| LLMNR | UDP 5355 | Queries for non-existent hostnames + unexpected responses |\n| NTLMSSP | — | NTLM authentication messages (NEGOTIATE → CHALLENGE → AUTH) |\n| SMB2 | TCP 445 | Session Setup containing NTLM auth |\n| DHCP | UDP 67/68 | Hostname discovery via Option 12 |\n\n### NTLM Authentication Flow\n\nThe NTLM challenge-response handshake has three steps:\n1. **NTLMSSP_NEGOTIATE** — Client initiates authentication\n2. **NTLMSSP_CHALLENGE** — Server sends a random challenge value\n3. **NTLMSSP_AUTH** — Client responds with hash computed from password + challenge\n\nThe `Server Challenge` + `NTProofStr` + `NTLMv2 Response` from steps 2-3 are what you need to construct a crackable hash.",
+    "toolReferences": [
+      {
+        "tool": "Wireshark",
+        "commands": [
+          "Filter: llmnr (or udp.port == 5355)",
+          "Filter: ntlmssp",
+          "Filter: ip.addr == <suspect_ip> && dhcp",
+          "View > Time Display Format > UTC Date and Time of Day",
+          "Expand: SMB2 > Session Setup > Security Blob > NTLMSSP"
+        ]
+      },
+      {
+        "tool": "hashcat",
+        "commands": [
+          "hashcat -a 0 -m 5600 hash.txt /usr/share/wordlists/rockyou.txt"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start by filtering for `llmnr` traffic — look at who is querying and who is responding. Legitimate hosts don't respond to LLMNR queries for names they don't own.",
+      "To find the attacker's hostname, look at DHCP traffic from the malicious IP — Option 12 reveals the hostname.",
+      "Filter `ntlmssp` to find the authentication messages. The NTLMSSP_AUTH packet contains the username and domain.",
+      "Set your time display to UTC (View > Time Display Format > UTC) before looking at timestamps — this catches many people.",
+      "The queried hostname in the LLMNR broadcasts reveals the victim's typo. Compare it to the hostname they actually wanted to reach.",
+      "To find the Server Challenge, look at the NTLMSSP_CHALLENGE packet. For NTProofStr, look in the NTLMSSP_AUTH packet under NTLMv2 Response.",
+      "The victim was trying to access an SMB share — filter `smb2` and look for Tree Connect Request packets to find the share path."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** Forela's IDS flagged unusual LLMNR traffic on the internal network. You're given `Noxious.pcap` to investigate a suspected LLMNR poisoning attack.\n\n**Network layout discovered during analysis:**\n\n| Role | IP Address | Hostname |\n|------|-----------|----------|\n| Domain Controller | `172.17.79.4` | `DC01` |\n| Victim | `172.17.79.136` | — |\n| Attacker | `172.17.79.135` | `kali` |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify the malicious host by analyzing LLMNR traffic",
+        "command": "Wireshark filter: llmnr",
+        "explanation": "Apply the `llmnr` filter (or `udp.port == 5355`). You'll see ~126 LLMNR packets. The victim `172.17.79.136` broadcasts queries for hostname `DCC01`. The host `172.17.79.135` responds to these queries, claiming to be `DCC01`. A legitimate host would NOT respond to LLMNR queries for a name it doesn't own — this is the attacker running Responder. **Answer: `172.17.79.135`**"
+      },
+      {
+        "stepNumber": 2,
+        "description": "Find the attacker's hostname via DHCP",
+        "command": "Wireshark filter: ip.addr == 172.17.79.135 && dhcp",
+        "explanation": "Locate the DHCP request from the attacker's IP. Expand `Option: (12) Host Name` in the packet details — the value is `kali`, confirming the attacker is running Kali Linux (consistent with Responder usage). **Answer: `kali`**"
+      },
+      {
+        "stepNumber": 3,
+        "description": "Extract the victim's username from the NTLM authentication",
+        "command": "Wireshark filter: ntlmssp",
+        "explanation": "Find the `NTLMSSP_AUTH` packet (the victim authenticating to the attacker's fake SMB service). Expand: `SMB2 > Session Setup Request > Security Blob > GSS-API > NTLMSSP > NTLMSSP_AUTH`. The `User name` field shows `john.deacon` and `Domain name` shows `FORELA`. **Answer: `john.deacon`**"
+      },
+      {
+        "stepNumber": 4,
+        "description": "Determine when credentials were first captured",
+        "command": "View > Time Display Format > UTC Date and Time of Day",
+        "explanation": "**Important**: Set Wireshark to UTC time display first. Then, with the `ntlmssp` filter active, find the first `NTLMSSP_AUTH` packet from victim to attacker. The timestamp is `2024-06-24 11:18:30`. **Answer: `2024-06-24 11:18:30`**"
+      },
+      {
+        "stepNumber": 5,
+        "description": "Identify the victim's typo that triggered the attack",
+        "command": "Wireshark filter: llmnr (examine query names)",
+        "explanation": "Look at the LLMNR queries from the victim — the queried hostname is `DCC01`, a typo for the actual domain controller `DC01`. Because `DCC01` doesn't exist in DNS, Windows falls back to LLMNR, and Responder poisons the response. **Answer: `DCC01`**"
+      },
+      {
+        "stepNumber": 6,
+        "description": "Extract the NTLM Server Challenge",
+        "command": "Expand NTLMSSP_CHALLENGE packet: SMB2 > Session Setup Response > Security Blob > NTLMSSP > NTLM Server Challenge",
+        "explanation": "In the `NTLMSSP_CHALLENGE` packet (sent from attacker to victim as part of the handshake), expand the NTLMSSP layer. The `NTLM Server Challenge` field contains the random value the server sends for the client to hash against. **Answer: `601019d191f054f1`**"
+      },
+      {
+        "stepNumber": 7,
+        "description": "Extract the NTProofStr from the authentication response",
+        "command": "Expand NTLMSSP_AUTH: NTLMv2 Response > NTProofStr",
+        "explanation": "In the `NTLMSSP_AUTH` packet, expand `NTLMv2 Response > NTProofStr`. This is the first 16 bytes of the NTLMv2 response — a keyed HMAC-MD5 hash that proves knowledge of the password. **Answer: `c0cc803a6d9fb5a9082253a04dbd4cd4`**"
+      },
+      {
+        "stepNumber": 8,
+        "description": "Crack the NetNTLMv2 hash to recover the password",
+        "command": "hashcat -a 0 -m 5600 hash.txt /usr/share/wordlists/rockyou.txt",
+        "explanation": "Construct the hash in hashcat format:\n`john.deacon::FORELA:601019d191f054f1:c0cc803a6d9fb5a9082253a04dbd4cd4:<remaining_NTLMv2_response_hex>`\n\nThe remaining hex is the NTLMv2 Response field minus its first 32 hex characters (which are the NTProofStr). Save to `hash.txt` and crack with hashcat mode 5600 (NetNTLMv2). Cracks in seconds against rockyou.txt. **Answer: `NotMyPassword0k?`**"
+      },
+      {
+        "stepNumber": 9,
+        "description": "Find the SMB share the victim was trying to access",
+        "command": "Wireshark filter: smb2 (look for Tree Connect Request)",
+        "explanation": "Filter for `smb2` traffic from the victim to the domain controller (`172.17.79.4`). Look for `Tree Connect Request` packets — these reveal the share path the user was trying to reach. The requested path is `\\\\DC01\\DC-Confidential`. **Answer: `\\\\DC01\\DC-Confidential`**"
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": null,
+    "nextChallengeId": "meerkat"
+  }
+}

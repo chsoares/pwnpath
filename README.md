@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PwnPath
 
-## Getting Started
+Structured learning paths through HackTheBox challenges and Sherlocks for defensive security and digital forensics.
 
-First, run the development server:
+## What is PwnPath?
+
+PwnPath curates HTB challenges into **progressive learning trails** organized by topic. Each trail builds skills from fundamentals to advanced topics, with structured lessons, progressive hints, and full solution walkthroughs.
+
+**This is a static site** — no backend, no auth, no AI at runtime. Content is researched and written during development, then built into static HTML.
+
+## Tech Stack
+
+- **Next.js 15** (App Router, `output: "export"`) — static site generation
+- **Tailwind CSS 4** — styling
+- **TypeScript** — type safety
+- **pnpm** — package management
+- **Content**: JSON files in `content/`, rendered with `react-markdown`
+- **Progress**: `localStorage` (no auth for v1)
+
+## Development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+pnpm dev       # Development server
+pnpm build     # Static export to out/
+pnpm lint      # ESLint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Content Structure
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+content/
+├── categories.json              # Master index
+└── network-forensics/           # One dir per category
+    ├── category.json            # Overview, tools, prerequisites
+    ├── path.json                # Ordered challenge list
+    ├── cheatsheet.json          # Command reference
+    └── challenges/              # One file per challenge
+        ├── noxious.json
+        ├── meerkat.json
+        └── ...
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Categories
 
-## Learn More
+| Category | Status | Challenges |
+|----------|--------|------------|
+| Network Forensics (PCAP) | Available | 5 (expanding to 10+) |
+| Memory Forensics | Coming Soon | — |
+| Disk & Filesystem Forensics | Coming Soon | — |
+| Log Analysis & SIEM | Coming Soon | — |
+| Malware Analysis | Coming Soon | — |
+| Incident Response | Coming Soon | — |
 
-To learn more about Next.js, take a look at the following resources:
+## License
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT

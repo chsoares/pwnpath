@@ -1,0 +1,45 @@
+{
+  "categoryId": "network-forensics",
+  "challenges": [
+    {
+      "position": 1,
+      "challengeId": "noxious",
+      "name": "Noxious",
+      "difficulty": "easy",
+      "estimatedTime": "1-2 hours",
+      "keyTakeaway": "LLMNR poisoning detection — extracting NTLMv2 hashes from network captures and understanding AD name resolution attacks"
+    },
+    {
+      "position": 2,
+      "challengeId": "meerkat",
+      "name": "Meerkat",
+      "difficulty": "easy",
+      "estimatedTime": "2-3 hours",
+      "keyTakeaway": "HTTP traffic analysis — credential stuffing detection, CVE exploitation, and correlating Suricata alerts with PCAP evidence"
+    },
+    {
+      "position": 3,
+      "challengeId": "litter",
+      "name": "Litter",
+      "difficulty": "easy",
+      "estimatedTime": "2-3 hours",
+      "keyTakeaway": "DNS tunneling forensics — detecting dnscat2 C2 channels and decoding exfiltrated data from DNS queries"
+    },
+    {
+      "position": 4,
+      "challengeId": "compromised",
+      "name": "Compromised",
+      "difficulty": "easy",
+      "estimatedTime": "2-3 hours",
+      "keyTakeaway": "Malware traffic analysis — Pikabot delivery via HTTP, self-signed TLS C2 channels, and DNS tunneling detection"
+    },
+    {
+      "position": 5,
+      "challengeId": "knock-knock",
+      "name": "Knock Knock",
+      "difficulty": "medium",
+      "estimatedTime": "3-4 hours",
+      "keyTakeaway": "Multi-phase attack reconstruction — port scanning, FTP password spray, port knocking, directory traversal, and ransomware deployment"
+    }
+  ]
+}

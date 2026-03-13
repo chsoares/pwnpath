@@ -1,0 +1,58 @@
+{
+  "categories": [
+    {
+      "id": "network-forensics",
+      "name": "Network Forensics (PCAP)",
+      "description": "Master traffic analysis through Wireshark, tshark, and protocol dissection. Learn to identify malicious communications, extract artifacts, and reconstruct attack narratives from packet captures.",
+      "icon": "network",
+      "status": "available",
+      "challengeCount": 5,
+      "focus": ["Wireshark", "tshark", "Traffic Analysis", "Protocol Dissection"]
+    },
+    {
+      "id": "memory-forensics",
+      "name": "Memory Forensics",
+      "description": "Analyze volatile memory dumps using Volatility to uncover running processes, injected code, network connections, and evidence of compromise.",
+      "icon": "memory",
+      "status": "coming_soon",
+      "challengeCount": 0,
+      "focus": ["Volatility", "Process Analysis", "Memory Artifacts"]
+    },
+    {
+      "id": "disk-forensics",
+      "name": "Disk & Filesystem Forensics",
+      "description": "Investigate disk images, recover deleted files, analyze filesystem artifacts, and trace user activity through registry hives and event logs.",
+      "icon": "disk",
+      "status": "coming_soon",
+      "challengeCount": 0,
+      "focus": ["Autopsy", "FTK", "Registry Analysis", "Event Logs"]
+    },
+    {
+      "id": "log-analysis",
+      "name": "Log Analysis & SIEM",
+      "description": "Parse and correlate logs from multiple sources to detect intrusions, lateral movement, and data exfiltration using SIEM techniques.",
+      "icon": "logs",
+      "status": "coming_soon",
+      "challengeCount": 0,
+      "focus": ["ELK Stack", "Splunk", "Log Correlation", "Detection Rules"]
+    },
+    {
+      "id": "malware-analysis",
+      "name": "Malware Analysis",
+      "description": "Perform static and dynamic analysis of malicious samples. Understand packing, obfuscation, C2 communication, and persistence mechanisms.",
+      "icon": "malware",
+      "status": "coming_soon",
+      "challengeCount": 0,
+      "focus": ["Static Analysis", "Dynamic Analysis", "Reverse Engineering"]
+    },
+    {
+      "id": "incident-response",
+      "name": "Incident Response",
+      "description": "End-to-end incident response scenarios combining multiple forensic disciplines. Practice triage, containment, eradication, and reporting.",
+      "icon": "incident",
+      "status": "coming_soon",
+      "challengeCount": 0,
+      "focus": ["Triage", "Timeline Analysis", "Reporting", "Containment"]
+    }
+  ]
+}

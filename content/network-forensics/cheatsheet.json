@@ -1,0 +1,64 @@
+{
+  "categoryId": "network-forensics",
+  "title": "Network Forensics Cheatsheet",
+  "sections": [
+    {
+      "title": "Wireshark Display Filters",
+      "commands": [
+        { "command": "tcp.port == 80", "description": "Filter HTTP traffic on port 80" },
+        { "command": "ip.addr == 192.168.1.1", "description": "Filter traffic to/from a specific IP" },
+        { "command": "http.request.method == \"GET\"", "description": "Show only HTTP GET requests" },
+        { "command": "http.request.method == \"POST\"", "description": "Show only HTTP POST requests" },
+        { "command": "dns", "description": "Show only DNS traffic" },
+        { "command": "tcp.flags.syn == 1 && tcp.flags.ack == 0", "description": "Show TCP SYN packets (connection initiations)" },
+        { "command": "frame contains \"password\"", "description": "Search packet contents for a string" },
+        { "command": "tcp.stream eq 5", "description": "Follow a specific TCP stream by index" },
+        { "command": "!(arp || dns || icmp)", "description": "Exclude common noise protocols" },
+        { "command": "http.response.code == 200", "description": "Show successful HTTP responses" },
+        { "command": "ssl.handshake.type == 1", "description": "Show TLS Client Hello messages" },
+        { "command": "smtp || pop || imap", "description": "Show email-related traffic" }
+      ]
+    },
+    {
+      "title": "tshark Commands",
+      "commands": [
+        { "command": "tshark -r capture.pcap", "description": "Read and display a PCAP file" },
+        { "command": "tshark -r capture.pcap -Y 'http'", "description": "Apply a display filter" },
+        { "command": "tshark -r capture.pcap -T fields -e ip.src -e ip.dst", "description": "Extract specific fields" },
+        { "command": "tshark -r capture.pcap -z conv,tcp", "description": "Show TCP conversation statistics" },
+        { "command": "tshark -r capture.pcap -z io,stat,60", "description": "Show I/O statistics per 60-second intervals" },
+        { "command": "tshark -r capture.pcap -q -z endpoints,ip", "description": "List all IP endpoints" },
+        { "command": "tshark -r capture.pcap --export-objects http,./exported", "description": "Export HTTP objects (files) from capture" },
+        { "command": "tshark -r capture.pcap -Y 'dns' -T fields -e dns.qry.name | sort -u", "description": "Extract unique DNS queries" }
+      ]
+    },
+    {
+      "title": "NetworkMiner",
+      "commands": [
+        { "command": "Open PCAP → Files tab", "description": "View all extracted files from the capture" },
+        { "command": "Open PCAP → Credentials tab", "description": "View extracted credentials (cleartext)" },
+        { "command": "Open PCAP → Images tab", "description": "View images transferred in the capture" },
+        { "command": "Open PCAP → DNS tab", "description": "View DNS queries and responses" }
+      ]
+    },
+    {
+      "title": "Zeek Quick Start",
+      "commands": [
+        { "command": "zeek -r capture.pcap", "description": "Process a PCAP and generate log files" },
+        { "command": "cat conn.log | zeek-cut id.orig_h id.resp_h id.resp_p", "description": "Extract connection source, destination, port" },
+        { "command": "cat dns.log | zeek-cut query | sort | uniq -c | sort -rn", "description": "Top queried domains" },
+        { "command": "cat http.log | zeek-cut host uri", "description": "Extract HTTP hosts and URIs" },
+        { "command": "cat files.log | zeek-cut filename mime_type md5", "description": "List transferred files with hashes" }
+      ]
+    },
+    {
+      "title": "Useful One-Liners",
+      "commands": [
+        { "command": "capinfos capture.pcap", "description": "Get PCAP metadata (duration, packet count, file size)" },
+        { "command": "editcap -c 10000 large.pcap split.pcap", "description": "Split large PCAP into chunks of 10k packets" },
+        { "command": "mergecap -w merged.pcap file1.pcap file2.pcap", "description": "Merge multiple PCAPs into one" },
+        { "command": "tcpdump -r capture.pcap -w filtered.pcap 'host 10.0.0.1'", "description": "Filter and save specific traffic to new PCAP" }
+      ]
+    }
+  ]
+}
