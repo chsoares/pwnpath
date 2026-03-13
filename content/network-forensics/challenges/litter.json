@@ -99,7 +99,7 @@
     ]
   },
   "navigation": {
-    "previousChallengeId": "meerkat",
+    "previousChallengeId": "pikaptcha",
     "nextChallengeId": "compromised"
   }
 }

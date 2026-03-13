@@ -1,5 +1,5 @@
 export type CategoryStatus = "available" | "coming_soon";
-export type Difficulty = "easy" | "medium" | "hard" | "insane";
+export type Difficulty = "very_easy" | "easy" | "medium" | "hard" | "insane";
 export type ChallengeSource = "sherlock" | "challenge" | "prolabs";
 
 export interface CategorySummary {

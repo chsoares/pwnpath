@@ -1,0 +1,74 @@
+{
+  "challengeId": "telly",
+  "name": "Telly",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Telly",
+  "difficulty": "very_easy",
+  "estimatedTime": "1 hour",
+  "keyTakeaway": "Telnet plaintext exploitation — analyzing unencrypted remote access sessions and understanding legacy protocol risks",
+  "tags": ["wireshark", "telnet", "plaintext", "persistence", "cve-2026-24061"],
+  "fundamentals": {
+    "content": "## Telnet Analysis & Legacy Protocol Risks\n\n### Why Telnet Is Dangerous\n\n**Telnet** (TCP port 23) is a legacy remote access protocol that transmits **everything in plaintext** — including usernames, passwords, and all commands typed during the session. Unlike SSH, there is zero encryption.\n\nThis means anyone capturing network traffic can:\n- Read login credentials directly\n- See every command the attacker executes\n- Reconstruct the entire session keystroke-by-keystroke\n\n### Telnet in Wireshark\n\nTelnet data is transmitted character-by-character (each keystroke is a separate packet), which makes it look fragmented. The best way to read a Telnet session is:\n\n1. Filter for `telnet` traffic\n2. Right-click a packet → **Follow > TCP Stream**\n3. The stream shows the full session in readable text\n\n| What to Look For | Where |\n|-----------------|-------|\n| Login credentials | Early in the TCP stream (login: / Password:) |\n| Commands executed | Full stream content |\n| Files accessed | `cat`, `less`, `vi` commands in stream |\n| Persistence | User creation, cron jobs, downloaded scripts |\n\n### CVE-2026-24061 — GNU InetUtils Telnet Auth Bypass\n\nThis vulnerability in GNU InetUtils telnetd allows authentication bypass, enabling attackers to gain access without valid credentials. When you see successful Telnet connections that bypass normal authentication flow, this CVE may be in play.\n\n### Post-Exploitation via Telnet\n\nOnce attackers gain Telnet access, common actions include:\n- Creating backdoor user accounts\n- Downloading persistence scripts (via `wget`, `curl`)\n- Exfiltrating sensitive files (databases, configs)\n- Setting up reverse shells for more reliable access",
+    "toolReferences": [
+      {
+        "tool": "Wireshark",
+        "commands": [
+          "Filter: telnet",
+          "Filter: tcp.port == 23",
+          "Right-click > Follow > TCP Stream (to read full session)",
+          "Filter: ftp || http (look for file downloads after initial access)",
+          "Filter: tcp.flags.syn == 1 && tcp.flags.ack == 0 (new connections)"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start by filtering `telnet` traffic and following the TCP stream — since Telnet is plaintext, you can read the entire session directly.",
+      "Look for the login prompt in the stream — the credentials are transmitted in cleartext.",
+      "After initial access, the attacker creates a backdoor user. Look for `useradd` or `adduser` commands in the session.",
+      "The attacker downloads a persistence script — look for `wget` or `curl` commands and note the filename.",
+      "For the exfiltrated database, look for commands that access or transfer database files (`.db` extension).",
+      "The vulnerability exploited is a recent CVE in the Telnet daemon — check the server banner or authentication flow for signs of GNU InetUtils."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A plaintext Telnet service was exploited on a Forela server. The attacker leveraged a vulnerability in GNU InetUtils telnetd to bypass authentication, establish persistence, and exfiltrate sensitive data. Analyze the PCAP to reconstruct the attack.\n\n**Key findings:**\n\n| Element | Detail |\n|---------|--------|\n| Vulnerability | CVE-2026-24061 (GNU InetUtils auth bypass) |\n| Backdoor user | `cleanupsvc` |\n| Backdoor password | `YouKnowWhoiam69` |\n| Persistence script | `linper.sh` |\n| Exfiltrated file | `credit-cards-25-blackfriday.db` |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify the Telnet vulnerability",
+        "command": "Wireshark filter: telnet → Follow TCP Stream",
+        "explanation": "Filter for Telnet traffic and follow the TCP stream. Examine the server banner and authentication flow. The telnetd service is GNU InetUtils, vulnerable to CVE-2026-24061 — an authentication bypass that allows the attacker to gain shell access without valid credentials. **Answer: CVE-2026-24061**"
+      },
+      {
+        "stepNumber": 2,
+        "description": "Read the attacker's session to find the backdoor account",
+        "command": "Follow TCP Stream on the Telnet session",
+        "explanation": "Reading through the plaintext Telnet session, look for user creation commands. The attacker runs a command to create a new user `cleanupsvc` with password `YouKnowWhoiam69`. This is a backdoor account disguised as a cleanup service to avoid suspicion. **Answer: `cleanupsvc:YouKnowWhoiam69`**"
+      },
+      {
+        "stepNumber": 3,
+        "description": "Identify the persistence mechanism",
+        "command": "Look for wget/curl commands in the Telnet stream",
+        "explanation": "In the Telnet session, the attacker downloads a persistence script using `wget` or `curl`. The script is named `linper.sh` (likely short for 'Linux persistence'). This script sets up mechanisms to maintain access even after reboots — common techniques include cron jobs, systemd services, or SSH key installation. **Answer: `linper.sh`**"
+      },
+      {
+        "stepNumber": 4,
+        "description": "Find the exfiltrated database",
+        "command": "Search for file access commands in the session",
+        "explanation": "The attacker accesses and exfiltrates a database file: `credit-cards-25-blackfriday.db`. This is clearly a high-value target containing payment card information. The attacker likely used the Telnet session or a secondary channel to transfer this file out. **Answer: `credit-cards-25-blackfriday.db`**"
+      },
+      {
+        "stepNumber": 5,
+        "description": "Reconstruct the full attack chain",
+        "command": "Correlate timeline across all streams",
+        "explanation": "The complete attack: (1) Attacker connects to Telnet service → (2) Exploits CVE-2026-24061 to bypass authentication → (3) Creates backdoor user `cleanupsvc` for persistent access → (4) Downloads `linper.sh` persistence script → (5) Locates and exfiltrates `credit-cards-25-blackfriday.db`. This demonstrates why legacy plaintext protocols like Telnet should never be exposed — every step is visible in the capture, but the damage is already done."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "origins",
+    "nextChallengeId": "noxious"
+  }
+}

@@ -99,7 +99,7 @@
     ]
   },
   "navigation": {
-    "previousChallengeId": null,
-    "nextChallengeId": "meerkat"
+    "previousChallengeId": "telly",
+    "nextChallengeId": "reaper"
   }
 }

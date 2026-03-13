@@ -3,6 +3,22 @@
   "challenges": [
     {
       "position": 1,
+      "challengeId": "origins",
+      "name": "Origins",
+      "difficulty": "very_easy",
+      "estimatedTime": "1 hour",
+      "keyTakeaway": "FTP brute force and data exfiltration detection — analyzing plaintext FTP credentials and tracking unauthorized file transfers"
+    },
+    {
+      "position": 2,
+      "challengeId": "telly",
+      "name": "Telly",
+      "difficulty": "very_easy",
+      "estimatedTime": "1 hour",
+      "keyTakeaway": "Telnet plaintext exploitation — analyzing unencrypted remote access sessions and understanding legacy protocol risks"
+    },
+    {
+      "position": 3,
       "challengeId": "noxious",
       "name": "Noxious",
       "difficulty": "easy",
@@ -10,7 +26,15 @@
       "keyTakeaway": "LLMNR poisoning detection — extracting NTLMv2 hashes from network captures and understanding AD name resolution attacks"
     },
     {
-      "position": 2,
+      "position": 4,
+      "challengeId": "reaper",
+      "name": "Reaper",
+      "difficulty": "very_easy",
+      "estimatedTime": "1-2 hours",
+      "keyTakeaway": "NTLM relay attack detection — identifying LLMNR poisoning chains leading to relay attacks and lateral movement in Active Directory"
+    },
+    {
+      "position": 5,
       "challengeId": "meerkat",
       "name": "Meerkat",
       "difficulty": "easy",
@@ -18,7 +42,15 @@
       "keyTakeaway": "HTTP traffic analysis — credential stuffing detection, CVE exploitation, and correlating Suricata alerts with PCAP evidence"
     },
     {
-      "position": 3,
+      "position": 6,
+      "challengeId": "pikaptcha",
+      "name": "Pikaptcha",
+      "difficulty": "easy",
+      "estimatedTime": "1-2 hours",
+      "keyTakeaway": "ClickFix social engineering detection — identifying fake CAPTCHA pages that trick users into executing malicious PowerShell via Run dialog"
+    },
+    {
+      "position": 7,
       "challengeId": "litter",
       "name": "Litter",
       "difficulty": "easy",
@@ -26,7 +58,7 @@
       "keyTakeaway": "DNS tunneling forensics — detecting dnscat2 C2 channels and decoding exfiltrated data from DNS queries"
     },
     {
-      "position": 4,
+      "position": 8,
       "challengeId": "compromised",
       "name": "Compromised",
       "difficulty": "easy",
@@ -34,12 +66,36 @@
       "keyTakeaway": "Malware traffic analysis — Pikabot delivery via HTTP, self-signed TLS C2 channels, and DNS tunneling detection"
     },
     {
-      "position": 5,
+      "position": 9,
+      "challengeId": "takedown",
+      "name": "Takedown",
+      "difficulty": "easy",
+      "estimatedTime": "2-3 hours",
+      "keyTakeaway": "DarkGate malware delivery chain analysis — tracing multi-stage malware from VBScript dropper through PowerShell to LOLBin execution and C2"
+    },
+    {
+      "position": 10,
+      "challengeId": "packet-puzzle",
+      "name": "Packet Puzzle",
+      "difficulty": "easy",
+      "estimatedTime": "2-3 hours",
+      "keyTakeaway": "CVE-2024-4577 PHP-CGI exploitation — detecting argument injection attacks against PHP servers and tracking post-exploitation privilege escalation"
+    },
+    {
+      "position": 11,
       "challengeId": "knock-knock",
       "name": "Knock Knock",
       "difficulty": "medium",
       "estimatedTime": "3-4 hours",
       "keyTakeaway": "Multi-phase attack reconstruction — port scanning, FTP password spray, port knocking, directory traversal, and ransomware deployment"
+    },
+    {
+      "position": 12,
+      "challengeId": "trent",
+      "name": "Trent",
+      "difficulty": "medium",
+      "estimatedTime": "3-4 hours",
+      "keyTakeaway": "Router command injection exploitation — analyzing CVE-2024-28353 against IoT/network devices, from initial compromise to reverse shell establishment"
     }
   ]
 }

@@ -1,0 +1,81 @@
+{
+  "challengeId": "takedown",
+  "name": "Takedown",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Takedown",
+  "difficulty": "easy",
+  "estimatedTime": "2-3 hours",
+  "keyTakeaway": "DarkGate malware delivery chain analysis — tracing multi-stage malware from VBScript dropper through PowerShell to LOLBin execution and C2",
+  "tags": ["wireshark", "darkgate", "vbscript", "powershell", "lolbin", "autohotkey", "c2"],
+  "fundamentals": {
+    "content": "## Multi-Stage Malware Delivery Chains\n\n### What is DarkGate?\n\nDarkGate is a commodity malware-as-a-service (MaaS) sold on underground forums. It features:\n- Remote access capabilities\n- Credential theft\n- Cryptocurrency mining\n- Keylogging\n- Clipboard hijacking\n\n### Multi-Stage Delivery\n\nModern malware rarely arrives as a single executable. Instead, it uses **multi-stage delivery** to evade detection:\n\n```\nStage 1: Initial dropper (VBScript, HTA, macro)\n    ↓ downloads\nStage 2: PowerShell stager (obfuscated, in-memory)\n    ↓ downloads + executes\nStage 3: LOLBin execution (legitimate binary abused)\n    ↓ loads\nStage 4: Final payload (the actual malware)\n    ↓ connects to\nStage 5: C2 server (command & control)\n```\n\n### LOLBins (Living Off the Land Binaries)\n\n**LOLBins** are legitimate, signed system binaries that attackers abuse to execute malicious code. Because they're trusted by the OS and security tools, they help evade detection.\n\nExamples: `mshta.exe`, `certutil.exe`, `rundll32.exe`, `regsvr32.exe`\n\nIn DarkGate campaigns, **AutoHotKey.exe** (`AutoHotKey.exe`) is commonly used as a LOLBin — it's a legitimate scripting tool that can execute `.ahk` scripts containing malicious commands.\n\n### Analyzing the Chain in Wireshark\n\n| Stage | What to Look For |\n|-------|------------------|\n| VBS dropper | HTTP download of `.vbs` file from compromised website |\n| PowerShell stage | HTTP request to different domain, PowerShell-encoded payload |\n| LOLBin download | HTTP download of legitimate executable (e.g., AutoHotKey.exe) |\n| Malware script | Download of `.ahk` or similar script file |\n| C2 connection | Persistent TCP/HTTP connection to attacker infrastructure |",
+    "toolReferences": [
+      {
+        "tool": "Wireshark",
+        "commands": [
+          "Filter: http.request (all HTTP requests in order)",
+          "Filter: http.request.uri contains \".vbs\" (VBScript downloads)",
+          "Filter: http.host (identify domains contacted)",
+          "File > Export Objects > HTTP (extract all downloaded files)",
+          "Filter: dns (resolve domains contacted during attack)",
+          "Follow TCP Stream on C2 connections"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start by looking at HTTP requests in chronological order — the delivery chain stages will appear as sequential downloads from different domains.",
+      "The first stage is a VBScript file downloaded from a compromised legitimate website. Look for `.vbs` file downloads.",
+      "The second stage involves PowerShell downloading from a different domain than stage 1. Look for a new domain appearing after the VBS execution.",
+      "The LOLBin used is a well-known legitimate tool often abused by DarkGate. Look for downloads of executable files with recognizable names.",
+      "The malware script has a specific extension matching the LOLBin that executes it (`.ahk` for AutoHotKey).",
+      "The C2 connection goes to a specific IP address. Look for persistent outbound connections after all stages execute."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** Forela detected suspicious network activity indicating a DarkGate malware infection. The attack used a multi-stage delivery chain starting from a compromised website. Analyze the PCAP to trace every stage of the infection.\n\n**Delivery chain:**\n\n| Stage | Domain/IP | Artifact |\n|-------|----------|----------|\n| 1 — VBS dropper | `escuelademarina.com` | VBScript file |\n| 2 — PowerShell | `badbutperfect.com` | PowerShell payload |\n| 3 — LOLBin | (download server) | `AutoHotKey.exe` |\n| 4 — Malware script | (download server) | `script.ahk` |\n| 5 — C2 | `103.124.105.78` | Persistent connection |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify Stage 1 — the VBScript dropper source",
+        "command": "Wireshark filter: http.request",
+        "explanation": "Examine HTTP requests chronologically. The first suspicious download is a VBScript file from `escuelademarina.com` — this is a compromised legitimate website (a naval school) being used to host the initial dropper. Compromising legitimate sites is a common technique to bypass URL reputation filters. **Answer: `escuelademarina.com`**"
+      },
+      {
+        "stepNumber": 2,
+        "description": "Identify Stage 2 — the PowerShell staging domain",
+        "command": "Wireshark filter: http.request (continuing timeline)",
+        "explanation": "After the VBScript executes, it triggers a PowerShell download from a different domain: `badbutperfect.com`. This separation of stages across different domains makes detection harder — blocking one domain doesn't prevent the full chain. **Answer: `badbutperfect.com`**"
+      },
+      {
+        "stepNumber": 3,
+        "description": "Identify the LOLBin used for execution",
+        "command": "File > Export Objects > HTTP (look for executable downloads)",
+        "explanation": "Export HTTP objects and look for downloaded executables. The attack downloads `AutoHotKey.exe` — a legitimate, signed scripting tool. DarkGate commonly abuses AutoHotKey because it's a trusted binary that can execute arbitrary scripts, bypassing application whitelisting. **Answer: `AutoHotKey.exe`**"
+      },
+      {
+        "stepNumber": 4,
+        "description": "Find the malware script loaded by the LOLBin",
+        "command": "Look for .ahk file downloads in HTTP objects",
+        "explanation": "Along with AutoHotKey.exe, the attacker downloads `script.ahk` — an AutoHotKey script containing the actual malicious payload. When AutoHotKey.exe runs `script.ahk`, it executes the DarkGate malware functionality while appearing as a legitimate AutoHotKey process. **Answer: `script.ahk`**"
+      },
+      {
+        "stepNumber": 5,
+        "description": "Identify the C2 server",
+        "command": "Look for persistent outbound connections after payload execution",
+        "explanation": "After all stages execute, the malware establishes a persistent connection to its command-and-control server at `103.124.105.78`. This C2 channel allows the attacker to remotely control the infected machine, exfiltrate data, and deploy additional payloads. **Answer: `103.124.105.78`**"
+      },
+      {
+        "stepNumber": 6,
+        "description": "Reconstruct the complete DarkGate delivery chain",
+        "command": "Correlate all stages chronologically",
+        "explanation": "The full chain: (1) User visits/is redirected to `escuelademarina.com` → VBScript dropper downloads → (2) VBS executes PowerShell that contacts `badbutperfect.com` → stager payload downloads → (3) PowerShell downloads `AutoHotKey.exe` (legitimate LOLBin) → (4) Downloads `script.ahk` (malicious script) → (5) AutoHotKey executes the malware → (6) C2 connection established to `103.124.105.78`. Each stage uses a different technique and domain to evade detection — this layered approach is characteristic of modern commodity malware."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "compromised",
+    "nextChallengeId": "packet-puzzle"
+  }
+}

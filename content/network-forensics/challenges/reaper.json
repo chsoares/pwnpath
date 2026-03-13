@@ -1,0 +1,82 @@
+{
+  "challengeId": "reaper",
+  "name": "Reaper",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Reaper",
+  "difficulty": "very_easy",
+  "estimatedTime": "1-2 hours",
+  "keyTakeaway": "NTLM relay attack detection — identifying LLMNR poisoning chains leading to relay attacks and lateral movement in Active Directory",
+  "tags": ["wireshark", "ntlm-relay", "llmnr", "active-directory", "smb", "lateral-movement"],
+  "fundamentals": {
+    "content": "## NTLM Relay Attacks\n\n### From LLMNR Poisoning to NTLM Relay\n\nIn the Noxious challenge, we saw LLMNR poisoning used to **capture** NTLMv2 hashes for offline cracking. NTLM relay takes this a step further: instead of cracking the hash, the attacker **relays the authentication in real-time** to another service, gaining immediate access.\n\n### How NTLM Relay Works\n\n1. Victim tries to access a resource → DNS fails → LLMNR broadcast\n2. Attacker (running Responder + ntlmrelayx) responds to LLMNR query\n3. Victim authenticates to attacker via NTLM\n4. Instead of capturing the hash, attacker **forwards** the auth to a target server\n5. Target server sees valid NTLM authentication → grants access\n6. Attacker gets authenticated session on the target without knowing the password\n\n### Key Difference: Capture vs Relay\n\n| Technique | Tool | Result | Requires Cracking? |\n|-----------|------|--------|--------------------|\n| LLMNR Poisoning (capture) | Responder | NTLMv2 hash | Yes |\n| NTLM Relay | ntlmrelayx | Authenticated session | No |\n\n### Detection in PCAPs\n\nLook for these indicators:\n- **LLMNR queries + unexpected responses** (same as poisoning)\n- **Workstation/IP mismatches** — a host claiming to be a workstation but with a different IP than expected\n- **Rapid NTLM auth to multiple targets** — relay chains show auth forwarded to services\n- **IPC$ share access** — `\\\\*\\IPC$` connections are often used for relay attacks\n- **Logon ID correlation** — track the same Logon ID across multiple SMB sessions\n\n### SMB Session Analysis\n\nIn SMB2, look for:\n- `Session Setup Request/Response` — contains NTLM auth blobs\n- `Tree Connect Request` — shows which share is being accessed\n- The `Account` and `Domain` fields reveal whose credentials are being relayed",
+    "toolReferences": [
+      {
+        "tool": "Wireshark",
+        "commands": [
+          "Filter: llmnr (identify poisoning)",
+          "Filter: ntlmssp (trace NTLM auth flow)",
+          "Filter: smb2 (session setup and tree connects)",
+          "Filter: smb2.cmd == 1 (Session Setup messages)",
+          "Filter: smb2.tree (Tree Connect requests for share access)",
+          "Expand: SMB2 > Session Setup > Security Blob > NTLMSSP > NTLMSSP_AUTH",
+          "Statistics > Conversations > TCP (identify unusual connection pairs)"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "This builds on LLMNR poisoning (Noxious) but goes further — the attacker doesn't just capture the hash, they relay it. Look for the LLMNR poisoning as the starting point.",
+      "Look for workstation/IP mismatches in the NTLM authentication messages. If a host identifies as one workstation but has a different IP, that's suspicious.",
+      "The victim whose credentials are relayed is identified in the NTLMSSP_AUTH packets. Look at the username and domain fields.",
+      "Track the Logon ID from the SMB Session Setup — this hex value ties together all activity under that authentication session.",
+      "Look for IPC$ share access (`\\\\*\\IPC$`) — this is commonly used in relay attacks for remote service interaction.",
+      "The attacker's ultimate goal is lateral movement. Follow what happens after the relay succeeds — what shares are accessed?"
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** Forela's SOC detected suspicious NTLM authentication patterns on the internal network. Analysis reveals an LLMNR poisoning attack that escalated to NTLM relay, allowing the attacker to authenticate to resources without cracking credentials.\n\n**Key actors:**\n\n| Role | Details |\n|------|--------|\n| Victim user | `arthur.kyle` |\n| Logon ID | `0x64A799` |\n| Attack chain | LLMNR poisoning → NTLM relay → IPC$ access |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify the LLMNR poisoning as the attack entry point",
+        "command": "Wireshark filter: llmnr",
+        "explanation": "Filter for LLMNR traffic to find the initial poisoning. Just like in Noxious, you'll see a host broadcasting LLMNR queries and an unexpected host responding. This is the attacker running Responder, but this time they're also running ntlmrelayx to relay (not just capture) the authentication."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Detect the workstation/IP mismatch",
+        "command": "Wireshark filter: ntlmssp",
+        "explanation": "Examine the NTLMSSP messages. Look at the workstation name in the NTLM auth versus the IP address it comes from. A mismatch — where the claimed workstation name doesn't match the expected IP for that host — is a strong indicator of relay. The attacker's machine is forwarding auth messages that claim to be from the victim's workstation."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Identify the relayed credentials",
+        "command": "Expand NTLMSSP_AUTH: User name and Domain name fields",
+        "explanation": "In the NTLMSSP_AUTH packets, expand the NTLMSSP layer to find the relayed credentials. The username is `arthur.kyle` — this user's authentication is being relayed by the attacker to access resources they shouldn't have access to. **Answer: `arthur.kyle`**"
+      },
+      {
+        "stepNumber": 4,
+        "description": "Extract the Logon ID for session tracking",
+        "command": "SMB2 Session Setup Response > Logon ID",
+        "explanation": "The Logon ID is a hex identifier that ties together all activity under one authenticated session. Find it in the SMB2 Session Setup Response packet. The value is `0x64A799`. This ID lets you track all actions the attacker performed using the relayed credentials. **Answer: `0x64A799`**"
+      },
+      {
+        "stepNumber": 5,
+        "description": "Find the share accessed via relay",
+        "command": "Wireshark filter: smb2.tree",
+        "explanation": "Filter for SMB2 Tree Connect requests to see what shares the attacker accessed using the relayed credentials. Look for `\\\\*\\IPC$` access — the IPC$ (Inter-Process Communication) share is used for remote service management and is a common relay target for lateral movement techniques. **Answer: `\\\\*\\IPC$`**"
+      },
+      {
+        "stepNumber": 6,
+        "description": "Reconstruct the full relay attack chain",
+        "command": "Correlate LLMNR → NTLM → SMB timeline",
+        "explanation": "The complete attack: (1) Attacker poisons LLMNR responses → (2) Victim authenticates to attacker via NTLM → (3) Instead of capturing the hash, attacker relays the NTLM auth to a target server → (4) Server accepts the relayed auth for `arthur.kyle` (Logon ID `0x64A799`) → (5) Attacker accesses `\\\\*\\IPC$` share for lateral movement. The key learning: NTLM relay is more dangerous than hash capture because it requires no cracking and provides immediate access."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "noxious",
+    "nextChallengeId": "meerkat"
+  }
+}

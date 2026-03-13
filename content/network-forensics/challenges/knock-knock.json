@@ -83,7 +83,7 @@
     ]
   },
   "navigation": {
-    "previousChallengeId": "compromised",
-    "nextChallengeId": null
+    "previousChallengeId": "packet-puzzle",
+    "nextChallengeId": "trent"
   }
 }

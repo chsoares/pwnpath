@@ -1,0 +1,88 @@
+{
+  "challengeId": "origins",
+  "name": "Origins",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Origins",
+  "difficulty": "very_easy",
+  "estimatedTime": "1 hour",
+  "keyTakeaway": "FTP brute force and data exfiltration detection — analyzing plaintext FTP credentials and tracking unauthorized file transfers",
+  "tags": ["wireshark", "ftp", "brute-force", "exfiltration", "phishing"],
+  "fundamentals": {
+    "content": "## FTP Protocol Analysis & Brute Force Detection\n\n### Why FTP Is a Goldmine for Network Forensics\n\n**File Transfer Protocol (FTP)** transmits everything in plaintext — credentials, commands, and file contents. This makes it trivially easy to analyze in Wireshark, but also trivially easy for attackers to exploit.\n\n### FTP Protocol Basics\n\nFTP uses two channels:\n- **Control channel** (TCP port 21) — login commands, directory listings, transfer commands\n- **Data channel** (TCP port 20 or dynamic) — actual file content transfers\n\nKey FTP commands in packet captures:\n\n| Command | Meaning |\n|---------|--------|\n| `USER` | Username being sent |\n| `PASS` | Password being sent (plaintext!) |\n| `RETR` | Download (retrieve) a file |\n| `STOR` | Upload (store) a file |\n| `LIST` | List directory contents |\n| `230` | Login successful |\n| `530` | Login failed |\n\n### Detecting FTP Brute Force\n\nA brute force attack against FTP shows a pattern of:\n1. Many rapid `USER`/`PASS` attempts from one IP\n2. Repeated `530 Login incorrect` responses\n3. Eventually a `230 Login successful` response\n4. Followed by data exfiltration (`RETR` commands)\n\n### SSH as a Pivot\n\nAfter obtaining valid credentials from FTP, attackers often try the same credentials on SSH (port 22) since users frequently reuse passwords across services.",
+    "toolReferences": [
+      {
+        "tool": "Wireshark",
+        "commands": [
+          "Filter: ftp (control channel commands)",
+          "Filter: ftp-data (file transfer contents)",
+          "Filter: ftp.response.code == 530 (failed logins)",
+          "Filter: ftp.response.code == 230 (successful logins)",
+          "Filter: ftp.request.command == USER",
+          "Filter: ftp.request.command == RETR",
+          "Follow TCP Stream on ftp-data to reconstruct transferred files"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start by filtering `ftp` traffic and look at the conversation — who is connecting to the FTP server and how many login attempts are there?",
+      "Filter for `ftp.response.code == 530` to count failed login attempts. The ratio of failures to successes reveals a brute force pattern.",
+      "After finding the successful login, look at what the attacker did next — `RETR` commands show which files were downloaded.",
+      "The attacker used the stolen credentials for more than just FTP. Look at SSH traffic from the same IP after the FTP compromise.",
+      "For the phishing email question, look at SMTP traffic or any email-related data in the capture.",
+      "To find exfiltrated data destinations, look for outbound connections to cloud storage services (S3, etc.) after the initial compromise."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** Forela's network captured suspicious activity involving their FTP server. An external attacker brute-forced FTP credentials, gained access, and exfiltrated sensitive data. You're given a PCAP to reconstruct the full attack chain.\n\n**Network layout discovered during analysis:**\n\n| Role | IP Address | Details |\n|------|-----------|--------|\n| FTP Server | Internal | Forela's file server |\n| Attacker | `15.206.185.207` | External IP performing brute force |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify the attacker's IP address",
+        "command": "Wireshark filter: ftp.response.code == 530",
+        "explanation": "Filter for failed FTP login responses. You'll see a large number of 530 responses all directed at the same IP: `15.206.185.207`. This is the attacker performing the brute force. The sheer volume of failed attempts from a single IP is the classic brute force signature. **Answer: `15.206.185.207`**"
+      },
+      {
+        "stepNumber": 2,
+        "description": "Find the brute-forced credentials",
+        "command": "Wireshark filter: ftp.response.code == 230",
+        "explanation": "Filter for successful FTP logins (230 response code). After hundreds of failed attempts, find the successful login. Look at the preceding `USER` and `PASS` commands in the same TCP stream. The attacker gained access with username `forela-ftp` and password `ftprocks69`. **Answer: `forela-ftp:ftprocks69`**"
+      },
+      {
+        "stepNumber": 3,
+        "description": "Determine the SSH password used post-compromise",
+        "command": "Follow the attack timeline after FTP access",
+        "explanation": "After gaining FTP access, the attacker found SSH credentials stored on the FTP server. The SSH password discovered and used for lateral movement was `B@ckup2024!`. This demonstrates why storing credentials in accessible file shares is dangerous. **Answer: `B@ckup2024!`**"
+      },
+      {
+        "stepNumber": 4,
+        "description": "Identify exfiltrated files",
+        "command": "Wireshark filter: ftp.request.command == RETR",
+        "explanation": "Filter for FTP RETR (retrieve/download) commands to see which files the attacker downloaded. Use `Follow TCP Stream` on the associated `ftp-data` connections to see the actual file contents being exfiltrated. Document each file the attacker pulled from the server."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Find the S3 bucket used for data exfiltration",
+        "command": "Look for cloud storage URLs in the traffic",
+        "explanation": "The attacker uploaded stolen data to an AWS S3 bucket. Look for HTTP/HTTPS requests containing S3 URLs in the traffic after the initial compromise. The bucket URL reveals the attacker's cloud staging infrastructure for the exfiltrated data."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Identify the phishing email details",
+        "command": "Examine email-related traffic in the PCAP",
+        "explanation": "The attack chain may have started with a phishing email. Look for SMTP traffic or email artifacts in the capture to identify the phishing email that initiated the compromise, including sender addresses and social engineering lures used."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Reconstruct the full attack timeline",
+        "command": "Correlate all findings chronologically",
+        "explanation": "The complete attack chain: (1) Attacker at `15.206.185.207` brute-forces FTP credentials → (2) Successfully logs in as `forela-ftp` → (3) Downloads sensitive files from the server → (4) Discovers SSH credentials (`B@ckup2024!`) in stored files → (5) Uses SSH for deeper access → (6) Exfiltrates data to external S3 bucket. This shows a classic post-exploitation lateral movement pattern."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": null,
+    "nextChallengeId": "telly"
+  }
+}

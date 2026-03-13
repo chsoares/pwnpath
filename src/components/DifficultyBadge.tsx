@@ -1,6 +1,7 @@
 import type { Difficulty } from "@/lib/types";
 
 const colors: Record<Difficulty, string> = {
+  very_easy: "bg-sky-500/15 text-sky-400 border-sky-500/30",
   easy: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   medium: "bg-amber-500/15 text-amber-400 border-amber-500/30",
   hard: "bg-red-500/15 text-red-400 border-red-500/30",
@@ -16,7 +17,7 @@ export default function DifficultyBadge({
     <span
       className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${colors[difficulty]}`}
     >
-      {difficulty}
+      {difficulty.replace("_", " ")}
     </span>
   );
 }
