@@ -5,16 +5,15 @@
   "prerequisites": [
     "Basic understanding of operating system internals (processes, memory, DLLs)",
     "Familiarity with command-line interfaces (both Linux and Windows)",
-    "Understanding of common malware techniques (process injection, C2 communication)",
-    "A HackTheBox account (free tier is sufficient for most challenges)"
+    "Understanding of common malware techniques (process injection, C2 communication)"
   ],
   "coreTools": [
     {
       "name": "Volatility 3",
       "description": "The current standard for memory forensics — Python 3 framework with plugin-based architecture for analyzing memory dumps",
       "installCommands": {
-        "linux": "pip install volatility3 / git clone https://github.com/volatilityfoundation/volatility3",
-        "macos": "pip install volatility3",
+        "linux": "pipx install volatility3",
+        "macos": "pipx install volatility3",
         "windows": "pip install volatility3"
       }
     },

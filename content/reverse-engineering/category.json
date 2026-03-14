@@ -5,33 +5,32 @@
   "prerequisites": [
     "Basic understanding of how programs execute (compilation, linking, loading)",
     "Familiarity with command-line Linux (navigating directories, running executables, reading man pages)",
-    "Elementary knowledge of C programming (variables, functions, pointers, control flow)",
-    "A HackTheBox account (free tier is sufficient for most challenges)"
+    "Elementary knowledge of C programming (variables, functions, pointers, control flow)"
   ],
   "coreTools": [
     {
       "name": "Ghidra",
       "description": "NSA's open-source reverse engineering framework — provides disassembly, decompilation, and scripting for analyzing binaries across architectures",
       "installCommands": {
-        "linux": "yay -S ghidra / sudo apt install ghidra",
+        "linux": "yay -S ghidra",
         "macos": "brew install --cask ghidra",
         "windows": "Download from ghidra-sre.org"
       }
     },
     {
       "name": "GDB + pwndbg",
-      "description": "GNU Debugger enhanced with pwndbg or GEF for modern debugging — set breakpoints, inspect registers, step through execution, and patch binaries at runtime",
+      "description": "GNU Debugger enhanced with pwndbg for modern debugging — set breakpoints, inspect registers, step through execution, and patch binaries at runtime",
       "installCommands": {
-        "linux": "sudo apt install gdb && git clone https://github.com/pwndbg/pwndbg && cd pwndbg && ./setup.sh",
-        "macos": "brew install gdb (limited on macOS — consider using a Linux VM)",
-        "windows": "Use WSL2 with Ubuntu for full GDB + pwndbg support"
+        "linux": "yay -S gdb pwndbg",
+        "macos": "brew install gdb (limited — use a Linux VM for full pwndbg support)",
+        "windows": "Use WSL2 with Ubuntu"
       }
     },
     {
-      "name": "radare2 / rizin",
+      "name": "radare2",
       "description": "CLI-first reverse engineering framework — disassembly, debugging, patching, and scripting in a single tool",
       "installCommands": {
-        "linux": "yay -S radare2 / sudo apt install radare2",
+        "linux": "yay -S radare2",
         "macos": "brew install radare2",
         "windows": "Download from radare.org or use WSL"
       }
@@ -40,17 +39,17 @@
       "name": "ltrace / strace",
       "description": "Library call and system call tracers — observe what a binary does at runtime without a full debugger",
       "installCommands": {
-        "linux": "sudo apt install ltrace strace (usually pre-installed)",
-        "macos": "dtruss (built-in, requires SIP disabled) / brew install strace is not available natively",
-        "windows": "Not available — use API Monitor or Process Monitor instead"
+        "linux": "yay -S ltrace strace",
+        "macos": "dtruss (built-in, requires SIP disabled)",
+        "windows": "Not available — use API Monitor or Process Monitor"
       }
     },
     {
-      "name": "objdump / readelf",
-      "description": "ELF binary inspection utilities — view headers, sections, symbol tables, and disassembly from the command line",
+      "name": "binutils (objdump, readelf, strings)",
+      "description": "ELF binary inspection utilities — view headers, sections, symbol tables, disassembly, and extract printable strings",
       "installCommands": {
-        "linux": "Included with binutils (pre-installed on most distributions)",
-        "macos": "brew install binutils (provides gobjdump and greadelf)",
+        "linux": "Pre-installed (binutils package)",
+        "macos": "brew install binutils",
         "windows": "Available through WSL or Cygwin"
       }
     },
@@ -58,18 +57,27 @@
       "name": "uncompyle6 / pycdc",
       "description": "Python bytecode decompilers — reconstruct Python source code from .pyc compiled files",
       "installCommands": {
-        "linux": "pip install uncompyle6 / git clone https://github.com/zrax/pycdc && cmake . && make",
-        "macos": "pip install uncompyle6 / brew install pycdc",
+        "linux": "pipx install uncompyle6",
+        "macos": "pipx install uncompyle6",
         "windows": "pip install uncompyle6"
       }
     },
     {
-      "name": "x64dbg",
-      "description": "Open-source Windows debugger — GUI-based dynamic analysis for PE executables with plugin support",
+      "name": "DNSpy",
+      "description": ".NET assembly debugger and decompiler — edit and debug .NET assemblies with full source reconstruction",
       "installCommands": {
-        "linux": "Not available natively — use Wine or a Windows VM",
-        "macos": "Not available natively — use a Windows VM",
-        "windows": "Download from x64dbg.com"
+        "linux": "Windows-only — use a Windows VM or Wine",
+        "macos": "Windows-only — use a Windows VM",
+        "windows": "Download from github.com/dnSpy/dnSpy/releases"
+      }
+    },
+    {
+      "name": "UPX",
+      "description": "Universal Packer for eXecutables — used to detect and unpack UPX-packed binaries",
+      "installCommands": {
+        "linux": "yay -S upx",
+        "macos": "brew install upx",
+        "windows": "Download from github.com/upx/upx/releases"
       }
     }
   ],

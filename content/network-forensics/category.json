@@ -4,33 +4,23 @@
   "overview": "Network forensics is the capture, recording, and analysis of network traffic to discover the source of security attacks or other incidents. In this learning path, you'll progress from basic packet capture analysis to advanced protocol dissection and attack reconstruction.\n\nYou'll work with real-world scenarios from HackTheBox Sherlocks and Challenges, building practical skills that translate directly to SOC analyst and incident responder roles.",
   "prerequisites": [
     "Basic understanding of TCP/IP networking (OSI model, common protocols)",
-    "Familiarity with command-line interfaces",
-    "A HackTheBox account (free tier is sufficient for most challenges)"
+    "Familiarity with command-line interfaces"
   ],
   "coreTools": [
     {
       "name": "Wireshark",
-      "description": "GUI-based packet analyzer — the gold standard for interactive PCAP analysis",
+      "description": "GUI-based packet analyzer — the gold standard for interactive PCAP analysis. Includes tshark (CLI counterpart) for scripting and automation",
       "installCommands": {
-        "linux": "sudo apt install wireshark / yay -S wireshark-qt",
+        "linux": "yay -S wireshark-qt",
         "macos": "brew install --cask wireshark",
         "windows": "Download from wireshark.org"
-      }
-    },
-    {
-      "name": "tshark",
-      "description": "Command-line packet analyzer — Wireshark's CLI counterpart for scripting and automation",
-      "installCommands": {
-        "linux": "Included with Wireshark installation",
-        "macos": "Included with Wireshark installation",
-        "windows": "Included with Wireshark installation"
       }
     },
     {
       "name": "NetworkMiner",
       "description": "Network forensic analysis tool for extracting files, images, and credentials from PCAP files",
       "installCommands": {
-        "linux": "Download from netresec.com (requires Mono)",
+        "linux": "yay -S networkminer",
         "macos": "Download from netresec.com (requires Mono)",
         "windows": "Download from netresec.com"
       }
@@ -39,9 +29,18 @@
       "name": "Zeek (Bro)",
       "description": "Network security monitor that generates high-level logs from packet captures",
       "installCommands": {
-        "linux": "sudo apt install zeek / yay -S zeek",
+        "linux": "yay -S zeek",
         "macos": "brew install zeek",
         "windows": "Not natively supported — use WSL"
+      }
+    },
+    {
+      "name": "hashcat",
+      "description": "GPU-accelerated password cracking — used to crack NTLM hashes, Kerberos tickets, and other credentials extracted from captures",
+      "installCommands": {
+        "linux": "yay -S hashcat",
+        "macos": "brew install hashcat",
+        "windows": "Download from hashcat.net"
       }
     }
   ],

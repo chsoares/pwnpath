@@ -5,70 +5,69 @@
   "prerequisites": [
     "Basic understanding of Windows filesystem concepts (NTFS, FAT32, file paths)",
     "Familiarity with the Windows Registry structure (hives, keys, values)",
-    "Basic command-line proficiency (PowerShell or Linux terminal)",
-    "A HackTheBox account (free tier is sufficient for most challenges)"
+    "Basic command-line proficiency (PowerShell or Linux terminal)"
   ],
   "coreTools": [
     {
       "name": "Autopsy",
       "description": "Open-source GUI forensics platform built on The Sleuth Kit — provides file browsing, keyword search, timeline analysis, and artifact extraction from disk images",
       "installCommands": {
-        "linux": "sudo apt install autopsy / yay -S autopsy",
+        "linux": "yay -S autopsy",
         "macos": "Download from autopsy.com",
         "windows": "Download from autopsy.com"
-      }
-    },
-    {
-      "name": "FTK Imager",
-      "description": "Disk imaging and basic analysis tool — mount images, browse filesystems, calculate hashes, and export files without modifying the source",
-      "installCommands": {
-        "linux": "Not natively supported — use a Windows VM",
-        "macos": "Not natively supported — use a Windows VM",
-        "windows": "Download from exterro.com"
       }
     },
     {
       "name": "The Sleuth Kit (TSK)",
       "description": "CLI forensics toolkit — includes fls (file listing), icat (file extraction), mmls (partition layout), fsstat (filesystem details), and more",
       "installCommands": {
-        "linux": "sudo apt install sleuthkit / yay -S sleuthkit",
+        "linux": "yay -S sleuthkit",
         "macos": "brew install sleuthkit",
         "windows": "Download from sleuthkit.org"
       }
     },
     {
-      "name": "RegRipper / Registry Explorer",
-      "description": "Windows registry analysis tools — RegRipper extracts forensic artifacts via plugins, Registry Explorer (Eric Zimmerman) provides GUI-based hive browsing",
+      "name": "FTK Imager",
+      "description": "Disk imaging and basic analysis tool — mount images, browse filesystems, calculate hashes, and export files without modifying the source",
       "installCommands": {
-        "linux": "git clone https://github.com/keydet89/RegRipper3.0 (requires Perl)",
-        "macos": "git clone https://github.com/keydet89/RegRipper3.0 (requires Perl)",
+        "linux": "Windows-only — use a Windows VM",
+        "macos": "Windows-only — use a Windows VM",
+        "windows": "Download from exterro.com"
+      }
+    },
+    {
+      "name": "RegRipper",
+      "description": "Windows registry analysis tool — extracts forensic artifacts from registry hives via Perl-based plugins",
+      "installCommands": {
+        "linux": "git clone https://github.com/keydet89/RegRipper3.0 (requires perl)",
+        "macos": "git clone https://github.com/keydet89/RegRipper3.0 (requires perl)",
         "windows": "Download Registry Explorer from ericzimmerman.github.io"
       }
     },
     {
-      "name": "MFTECmd",
-      "description": "MFT parser from Eric Zimmerman's toolkit — parses $MFT, $J (USN Journal), $LogFile, and $Boot for NTFS forensic analysis",
+      "name": "MFTECmd (Eric Zimmerman)",
+      "description": "MFT parser — parses $MFT, $J (USN Journal), $LogFile, and $Boot for NTFS forensic analysis",
       "installCommands": {
-        "linux": "dotnet tool install MFTECmd (requires .NET runtime)",
-        "macos": "dotnet tool install MFTECmd (requires .NET runtime)",
+        "linux": "yay -S dotnet-runtime && dotnet tool install --global EZTools",
+        "macos": "dotnet tool install --global EZTools (requires .NET runtime)",
         "windows": "Download from ericzimmerman.github.io"
       }
     },
     {
       "name": "plaso / log2timeline",
-      "description": "Super timeline generation framework — ingests disk images and produces a unified timeline from all artifact sources (registry, event logs, filesystem timestamps, browser history, etc.)",
+      "description": "Super timeline generation framework — ingests disk images and produces a unified timeline from all artifact sources",
       "installCommands": {
-        "linux": "sudo apt install plaso / pip install plaso",
-        "macos": "pip install plaso",
+        "linux": "pipx install plaso",
+        "macos": "pipx install plaso",
         "windows": "pip install plaso"
       }
     },
     {
-      "name": "secretsdump.py (Impacket)",
-      "description": "Extracts credentials from ntds.dit (Active Directory database) and SAM/SYSTEM registry hives — essential for AD forensics",
+      "name": "Impacket (secretsdump.py)",
+      "description": "Extracts credentials from ntds.dit and SAM/SYSTEM registry hives — essential for AD forensics",
       "installCommands": {
-        "linux": "pip install impacket / yay -S impacket",
-        "macos": "pip install impacket",
+        "linux": "pipx install impacket",
+        "macos": "pipx install impacket",
         "windows": "pip install impacket"
       }
     }
