@@ -25,6 +25,41 @@ A static web application that curates HackTheBox challenges/Sherlocks into progr
 4. **Client components** — Only use `"use client"` for components needing browser APIs (localStorage, useState). Keep data loading server-side.
 5. **No auth** — Progress tracking uses `localStorage` via `src/lib/progress.ts`.
 
+## Content Creation Pipeline (MANDATORY)
+
+**CRITICAL: Every lesson MUST be grounded in real, verified HTB challenge data. NEVER invent or guess challenge mechanics, vulnerability types, flags, or solutions.**
+
+The pipeline for creating or revising lessons is strictly sequential:
+
+### Step 1: Research
+- Search the internet for HTB challenges/Sherlocks in the target category
+- Collect challenge names, difficulty ratings, and URLs
+- Identify which techniques/concepts each challenge teaches
+
+### Step 2: Read Writeups
+- For EVERY candidate challenge, find and read **at least 2 independent public writeups**
+- Extract: the actual vulnerability/technique, exact exploit steps, tools used, answers to HTB questions
+- Note the real binary behavior (what it does, what functions exist, what protections are enabled)
+- **If you cannot find writeups, you cannot include the challenge**
+
+### Step 3: Select and Order
+- Select challenges based on concept diversity, difficulty spread, and pedagogical value
+- Order them so each lesson introduces exactly one new concept/technique
+- Verify the progression makes sense (prerequisites build on each other)
+
+### Step 4: Create Lessons
+- The `fundamentals` section teaches the **concept/technique** (e.g., "what is a format string vulnerability")
+- The `solution` section applies that concept to the **specific HTB challenge**
+- Solution steps must match what the challenge ACTUALLY requires (verified from writeups)
+- **The lesson teaches a topic; the challenge is the lab to practice it — not the other way around**
+
+### Anti-Hallucination Rules
+- **NEVER guess** what a challenge does based on its name alone
+- **NEVER invent** function names, addresses, vulnerability types, or exploit steps
+- **NEVER assume** a challenge is ret2win, format string, heap, etc. without writeup verification
+- If unsure about a detail, search for it or mark it as needing verification
+- Cross-reference challenge mechanics against at least 2 independent sources
+
 ## Content Volume & Quality Standards
 
 ### Minimum challenge counts per category
@@ -43,7 +78,7 @@ When populating a category, **research at least 50-100% more candidates** than t
 Solutions must be **real walkthroughs**, not expanded hints. Each must include:
 - The exact questions/tasks asked by HTB
 - The specific answers and how to find them
-- Precise Wireshark filters, CLI commands, and tool usage at each step
+- Precise tool commands and usage at each step
 - Explanation of WHY each step works (educational value)
 - Content sourced from verified public writeups (never invented)
 

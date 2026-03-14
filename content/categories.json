@@ -60,7 +60,7 @@
       "description": "Exploit software vulnerabilities through buffer overflows, ROP chains, heap manipulation, and format string attacks. Learn to bypass modern protections like ASLR, NX, and stack canaries.",
       "icon": "exploit",
       "status": "available",
-      "challengeCount": 21,
+      "challengeCount": 16,
       "focus": ["Buffer Overflow", "ROP Chains", "Heap Exploitation", "pwntools"]
     }
   ]
