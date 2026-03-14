@@ -3,7 +3,7 @@ import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PwnPath // Structured Hacking Trails",
+  title: "root@pwnpath",
   description:
     "Curated HackTheBox challenges organized into progressive learning paths for offensive and defensive security.",
 };
