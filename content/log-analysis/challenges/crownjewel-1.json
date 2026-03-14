@@ -1,0 +1,92 @@
+{
+  "challengeId": "crownjewel-1",
+  "name": "CrownJewel-1",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/CrownJewel-1",
+  "difficulty": "easy",
+  "estimatedTime": "2-3 hours",
+  "keyTakeaway": "NTDS.dit dump detection — correlating Windows event logs with MFT analysis to identify Volume Shadow Copy abuse on a Domain Controller",
+  "tags": ["NTDS.dit", "Volume Shadow Copy", "vssadmin", "MFTECmd", "Active Directory", "Domain Controller", "Event ID 7036", "credential dumping"],
+  "fundamentals": {
+    "content": "## Detecting NTDS.dit Dumps via Event Logs and MFT Analysis\n\n### What Is NTDS.dit?\n\nThe `NTDS.dit` file is the Active Directory database stored on every Domain Controller at `C:\\Windows\\NTDS\\NTDS.dit`. It contains **every domain user's password hash**, making it the single most valuable target in an AD environment. If an attacker obtains this file, they can crack or pass-the-hash for every account in the domain.\n\n### Why Volume Shadow Copy?\n\nNTDS.dit is locked by the Active Directory service and cannot be directly copied. Attackers use `vssadmin` to create a Volume Shadow Copy — a snapshot of the volume — then copy NTDS.dit from the shadow copy where it's not locked.\n\n```\nvssadmin create shadow /for=C:\ncopy \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\Windows\\NTDS\\NTDS.dit C:\\temp\\ntds.dit\n```\n\n### Detection via Event Logs\n\n| Event Source | Event ID | What It Records |\n|-------------|---------|----------------|\n| System.evtx | 7036 | Volume Shadow Copy service state changes (running/stopped) |\n| Security.evtx | 4688 | Process creation (vssadmin.exe command line) |\n| NTDS.evtx | Various | AD database operations |\n\n**Event ID 7036** is critical: the Volume Shadow Copy service starting on a DC outside of scheduled backups is inherently suspicious.\n\n### Detection via MFT Analysis\n\nThe NTFS Master File Table ($MFT) records every file creation, modification, and deletion on the volume. Even if the attacker deletes the copied NTDS.dit, the MFT retains evidence of the file's existence, creation timestamp, and original path. MFTECmd parses the raw $MFT file into searchable CSV format.",
+    "toolReferences": [
+      {
+        "tool": "EvtxECmd",
+        "commands": [
+          "EvtxECmd.exe -f System.evtx --csv . --csvf system.csv",
+          "EvtxECmd.exe -f Security.evtx --inc 4688 --csv . --csvf security.csv"
+        ]
+      },
+      {
+        "tool": "MFTECmd",
+        "commands": [
+          "MFTECmd.exe -f $MFT --csv . --csvf mft_output.csv",
+          "Filter mft_output.csv for 'ntds' or 'NTDS.dit'"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start with the System event log — filter for Event ID 7036 to find when the Volume Shadow Copy service started.",
+      "The timestamp of the VSS service starting is the first indicator of the NTDS.dit dump attack.",
+      "Check Security event logs for Event ID 4688 (process creation) around the same time — look for vssadmin.exe execution.",
+      "The process command line in Event ID 4688 reveals the exact vssadmin command used, including the target volume.",
+      "Parse the $MFT with MFTECmd and search for NTDS.dit — the MFT records file creation even if the copy was later deleted.",
+      "Look at the MFT entry timestamps: the Created timestamp shows when the NTDS.dit copy was made, and the ParentPath shows where it was saved.",
+      "Correlate the user account that ran vssadmin with their normal duties — a Domain Admin creating shadow copies outside backup windows is suspicious.",
+      "Check for SYSTEM hive extraction as well — attackers need both NTDS.dit and the SYSTEM hive to extract hashes."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A Domain Controller may have had its NTDS.dit database dumped by a compromised Domain Admin account. You're provided with event logs and the $MFT from the DC.\n\n**Key Artifacts:**\n- Windows Event Logs (System, Security)\n- $MFT (NTFS Master File Table)\n\n**Attack Chain:** Domain Admin access -> vssadmin shadow copy creation -> NTDS.dit extraction from shadow copy",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Parse the System event log for VSS activity",
+        "command": "EvtxECmd.exe -f System.evtx --inc 7036 --csv . --csvf system_7036.csv",
+        "explanation": "Event ID 7036 records service state changes. Filter for the Volume Shadow Copy service entering the 'running' state. On a DC, this service starting outside of scheduled backup windows is a strong indicator of credential dumping."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Find the vssadmin command execution",
+        "command": "Filter Security.evtx: EventId==4688, CommandLine contains 'vssadmin'",
+        "explanation": "Event ID 4688 with command-line auditing captures the exact vssadmin command. Look for `vssadmin create shadow /for=C:` — this creates the volume snapshot that allows copying the locked NTDS.dit file."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Identify the user who ran the command",
+        "command": "Check SubjectUserName in the 4688 event",
+        "explanation": "The SubjectUserName field reveals which Domain Admin account executed the vssadmin command. This is the compromised account — or the insider threat. Correlate this account with other suspicious activity in the logs."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Parse the MFT for NTDS.dit artifacts",
+        "command": "MFTECmd.exe -f $MFT --csv . --csvf mft_output.csv",
+        "explanation": "MFTECmd converts the raw $MFT binary into a searchable CSV. The MFT records every file operation on the NTFS volume, including file creation timestamps and paths."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Search for NTDS.dit copy evidence",
+        "command": "Filter mft_output.csv for FileName containing 'ntds'",
+        "explanation": "The MFT entry reveals when and where the NTDS.dit copy was created. Even if the attacker deleted the file after exfiltration, the MFT entry persists and proves the file existed at that path with precise timestamps."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Determine the shadow copy device path",
+        "command": "Correlate the VSS creation timestamp with 4688 events",
+        "explanation": "The copy command typically references a path like `\\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\`. The shadow copy number and the exact device path appear in the process creation events and confirm which shadow copy was used for extraction."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Build the complete timeline",
+        "command": "Correlate all timestamps: VSS service start -> vssadmin execution -> NTDS.dit copy -> cleanup",
+        "explanation": "The full attack sequence is visible by combining event log timestamps with MFT timestamps: VSS service starts, vssadmin creates the shadow copy, NTDS.dit is copied to a staging directory, and optionally the shadow copy is deleted to cover tracks. The time gap between copy creation and deletion indicates how long the attacker had access."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "campfire-2",
+    "nextChallengeId": "bumblebee"
+  }
+}

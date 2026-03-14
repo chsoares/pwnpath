@@ -1,0 +1,105 @@
+{
+  "challengeId": "tracer",
+  "name": "Tracer",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Tracer",
+  "difficulty": "medium",
+  "estimatedTime": "3-4 hours",
+  "keyTakeaway": "PsExec lateral movement detection — identifying service installation, named pipe creation, and execution artifacts across prefetch files and event logs",
+  "tags": ["PsExec", "lateral movement", "Prefetch", "PECmd", "MFTECmd", "service installation", "Event ID 7045", "named pipes", "NTFS forensics"],
+  "fundamentals": {
+    "content": "## PsExec Lateral Movement Detection\n\n### What Is PsExec?\n\nPsExec is a Sysinternals tool that enables remote command execution on Windows systems. While legitimate for administration, it's one of the most commonly abused tools for lateral movement in real-world attacks. Understanding its forensic footprint is essential for any defender.\n\n### How PsExec Works\n\n1. **Authenticates** to the target's ADMIN$ share using provided credentials\n2. **Copies** `PSEXESVC.exe` to `C:\\Windows\\` on the target\n3. **Creates and starts** a service (`PSEXESVC`) on the remote system\n4. **Establishes** named pipes for stdin/stdout/stderr communication\n5. **Executes** the specified command through the service\n6. **Cleans up** by stopping the service and deleting the binary (in default mode)\n\n### Forensic Artifacts of PsExec\n\n| Artifact | Location | What It Proves |\n|----------|----------|---------------|\n| Event ID 7045 | System.evtx | PSEXESVC service installation |\n| Prefetch file | C:\\Windows\\Prefetch\\PSEXESVC.EXE-*.pf | Execution with timestamps |\n| MFT entry | $MFT | File creation/deletion of PSEXESVC.exe |\n| Named pipes | Security.evtx (5145) | Pipe creation for I/O redirection |\n| Network logon | Security.evtx (4624, Type 3) | Remote authentication |\n| .key files | C:\\Windows\\ | PsExec authentication tokens |\n\n### Event ID 7045: Service Installation\n\nThis is the strongest single indicator of PsExec usage. When PsExec creates its service on the target, the System event log records:\n- **Service Name:** PSEXESVC (default) or custom name with `-r` flag\n- **Service File Name:** Full path to the service binary\n- **Service Type:** User mode service\n- **Service Start Type:** Demand start (manual)\n\n### MFT and Prefetch Correlation\n\nEven if PsExec cleans up after itself (deletes PSEXESVC.exe and removes the service), evidence persists in:\n- **$MFT:** The file's MFT entry shows Created/Modified timestamps\n- **Prefetch:** The .pf file proves execution and persists after binary deletion\n- **$UsnJrnl:** The USN Journal records the file create/delete operations",
+    "toolReferences": [
+      {
+        "tool": "PECmd (Prefetch parser)",
+        "commands": [
+          "PECmd.exe -d C:\\Windows\\Prefetch\\ --csv . --csvf prefetch.csv",
+          "PECmd.exe -f PSEXESVC.EXE-*.pf (parse PsExec service prefetch)"
+        ]
+      },
+      {
+        "tool": "MFTECmd",
+        "commands": [
+          "MFTECmd.exe -f $MFT --csv . --csvf mft.csv",
+          "Filter mft.csv for 'PSEXESVC' or '.key' files"
+        ]
+      },
+      {
+        "tool": "EvtxECmd",
+        "commands": [
+          "EvtxECmd.exe -f System.evtx --inc 7045 --csv . --csvf services.csv",
+          "EvtxECmd.exe -f Security.evtx --inc 4624,5145 --csv . --csvf security.csv"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start with the System event log — filter for Event ID 7045 to find service installations. PsExec creates a service named PSEXESVC by default.",
+      "The service binary path in Event ID 7045 confirms where PSEXESVC.exe was written — typically C:\\Windows\\.",
+      "Parse Prefetch files with PECmd — the PSEXESVC.EXE Prefetch file proves execution and provides timestamps, even if the binary was deleted.",
+      "Use MFTECmd to parse the $MFT and search for PSEXESVC.exe — the MFT entry reveals creation and modification timestamps.",
+      "Look for .key files in the MFT — PsExec creates these for authentication and they may persist after cleanup.",
+      "Check Security event log for Event ID 4624 (Type 3 - Network logon) around the same time as the service installation.",
+      "Event ID 5145 in the Security log records named pipe access — PsExec uses named pipes (stdin/stdout/stderr) for I/O redirection.",
+      "The source IP in the 4624 event reveals which system the attacker moved laterally from."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** Lateral movement was detected on a Windows system. You're provided with event logs, Prefetch files, and the $MFT to identify the PsExec-based attack and trace the attacker's movement.\n\n**Key Artifacts:**\n- Windows Event Logs (System, Security)\n- Prefetch files\n- $MFT (Master File Table)\n\n**Attack Pattern:** Remote authentication -> PSEXESVC binary copy -> Service creation -> Command execution -> Cleanup",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Detect the PsExec service installation",
+        "command": "EvtxECmd.exe -f System.evtx --inc 7045 --csv . --csvf services.csv",
+        "explanation": "Event ID 7045 records new service installations. Filter for services with the name 'PSEXESVC' or with a service binary path pointing to PSEXESVC.exe. The timestamp of this event marks when PsExec executed on this system."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Identify the source of lateral movement",
+        "command": "Filter Security.evtx: EventId==4624, LogonType==3",
+        "explanation": "Event ID 4624 with LogonType 3 (Network) records remote authentication. Look for network logons occurring just before the service installation — the SourceNetworkAddress field reveals which system the attacker came from."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Confirm execution via Prefetch",
+        "command": "PECmd.exe -d prefetch/ --csv . --csvf prefetch.csv",
+        "explanation": "Parse Prefetch files and search for PSEXESVC.EXE. The Prefetch entry provides the last 8 execution timestamps and the run count, showing how many times PsExec was used on this system. The referenced files list shows what DLLs and files were accessed during execution."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Analyze MFT for file creation evidence",
+        "command": "MFTECmd.exe -f $MFT --csv . --csvf mft.csv",
+        "explanation": "Parse the MFT and filter for PSEXESVC.exe entries. The Created0x10 timestamp shows when the binary was first written to disk, and the Modified0x10 timestamp may differ if it was updated. Even if PsExec deleted the binary, the MFT entry often persists."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Search for PsExec .key files",
+        "command": "Filter mft.csv for files with '.key' extension in C:\\Windows\\",
+        "explanation": "PsExec creates .key files in the Windows directory as part of its authentication mechanism. These files are named with the PsExec session identifier and may persist after the main binary is cleaned up, providing additional evidence of PsExec usage."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Check named pipe activity",
+        "command": "Filter Security.evtx: EventId==5145 for pipe access",
+        "explanation": "Event ID 5145 records network share object access, including named pipes. PsExec creates pipes for stdin, stdout, and stderr redirection. The pipe names typically follow the pattern 'PSEXESVC-<hostname>-<pid>-stdin/stdout/stderr'."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Determine the executed command",
+        "command": "Correlate process creation events (4688 or Sysmon ID 1) with the PSEXESVC parent process",
+        "explanation": "The command executed through PsExec appears as a child process of PSEXESVC.exe. Filter process creation events where the parent process is PSEXESVC to see exactly what the attacker ran on this system."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Build the lateral movement timeline",
+        "command": "Combine all artifact timestamps: authentication -> binary copy -> service install -> execution -> cleanup",
+        "explanation": "The complete PsExec lateral movement sequence is visible across all artifacts: network logon (4624), file creation (MFT), service installation (7045), command execution (4688/Sysmon), and cleanup. This timeline proves the lateral movement and reveals the attacker's objectives on this system."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "heartbreaker",
+    "nextChallengeId": "nubilum-1"
+  }
+}

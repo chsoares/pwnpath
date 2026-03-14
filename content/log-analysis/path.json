@@ -1,0 +1,101 @@
+{
+  "categoryId": "log-analysis",
+  "challenges": [
+    {
+      "position": 1,
+      "challengeId": "brutus",
+      "name": "Brutus",
+      "difficulty": "very_easy",
+      "estimatedTime": "1 hour",
+      "keyTakeaway": "Linux auth.log parsing — SSH brute-force detection, identifying successful logins, and tracking post-exploitation activity from authentication logs"
+    },
+    {
+      "position": 2,
+      "challengeId": "unit42",
+      "name": "Unit42",
+      "difficulty": "very_easy",
+      "estimatedTime": "1-2 hours",
+      "keyTakeaway": "Sysmon log analysis — filtering process creation events, network connections, and registry modifications to trace malware execution on Windows"
+    },
+    {
+      "position": 3,
+      "challengeId": "campfire-1",
+      "name": "Campfire-1",
+      "difficulty": "very_easy",
+      "estimatedTime": "1-2 hours",
+      "keyTakeaway": "Kerberoasting detection — identifying suspicious Kerberos TGS requests (Event ID 4769) with RC4 encryption in Domain Controller security logs"
+    },
+    {
+      "position": 4,
+      "challengeId": "logjammer",
+      "name": "Logjammer",
+      "difficulty": "easy",
+      "estimatedTime": "2-3 hours",
+      "keyTakeaway": "Multi-source Windows event log analysis — correlating Security, System, Defender, Firewall, and PowerShell logs to reconstruct an attack chain"
+    },
+    {
+      "position": 5,
+      "challengeId": "campfire-2",
+      "name": "Campfire-2",
+      "difficulty": "easy",
+      "estimatedTime": "2-3 hours",
+      "keyTakeaway": "AS-REP Roasting detection — filtering Kerberos authentication events (Event ID 4768) to identify attacks against accounts without preauthentication"
+    },
+    {
+      "position": 6,
+      "challengeId": "crownjewel-1",
+      "name": "CrownJewel-1",
+      "difficulty": "easy",
+      "estimatedTime": "2-3 hours",
+      "keyTakeaway": "NTDS.dit dump detection — correlating Windows event logs with MFT analysis to identify Volume Shadow Copy abuse on a Domain Controller"
+    },
+    {
+      "position": 7,
+      "challengeId": "bumblebee",
+      "name": "Bumblebee",
+      "difficulty": "easy",
+      "estimatedTime": "2-3 hours",
+      "keyTakeaway": "Web application log forensics — correlating NGINX access logs with SQLite database records to trace credential theft and unauthorized access"
+    },
+    {
+      "position": 8,
+      "challengeId": "ticktock",
+      "name": "Tick Tock",
+      "difficulty": "medium",
+      "estimatedTime": "3-4 hours",
+      "keyTakeaway": "Remote access and C2 detection — analyzing TeamViewer artifacts, Merlin C2 agent traces, and system time manipulation through event logs"
+    },
+    {
+      "position": 9,
+      "challengeId": "heartbreaker",
+      "name": "Heartbreaker",
+      "difficulty": "medium",
+      "estimatedTime": "3-4 hours",
+      "keyTakeaway": "Multi-artifact phishing investigation — correlating email artifacts, Sysmon logs, browser history, and prefetch files to trace a full attack chain"
+    },
+    {
+      "position": 10,
+      "challengeId": "tracer",
+      "name": "Tracer",
+      "difficulty": "medium",
+      "estimatedTime": "3-4 hours",
+      "keyTakeaway": "PsExec lateral movement detection — identifying service installation, named pipe creation, and execution artifacts across prefetch files and event logs"
+    },
+    {
+      "position": 11,
+      "challengeId": "nubilum-1",
+      "name": "Nubilum-1",
+      "difficulty": "medium",
+      "estimatedTime": "3-4 hours",
+      "keyTakeaway": "Cloud log forensics — analyzing AWS CloudTrail logs with jq to trace credential compromise, resource creation, and C2 server deployment"
+    },
+    {
+      "position": 12,
+      "challengeId": "i-like-to",
+      "name": "i-like-to",
+      "difficulty": "medium",
+      "estimatedTime": "4-5 hours",
+      "keyTakeaway": "Multi-artifact CVE investigation — correlating MFT data, event logs, SQL dumps, and PowerShell history to reconstruct a MOVEit Transfer exploitation"
+    }
+  ]
+}

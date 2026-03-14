@@ -1,0 +1,89 @@
+{
+  "challengeId": "aptnightmare2",
+  "name": "APTNightmare2",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/APTNightmare2",
+  "difficulty": "hard",
+  "estimatedTime": "4-6 hours",
+  "keyTakeaway": "Linux rootkit detection — identifying kernel-level rootkits that hide processes via signal-based mechanisms, analyzing malicious kernel modules, and detecting advanced evasion techniques like nfnetlink masquerading",
+  "tags": ["Volatility", "Linux rootkit", "kernel modules", "process hiding", "advanced evasion", "linux_check_modules", "nfnetlink"],
+  "fundamentals": {
+    "content": "## Linux Rootkit Detection in Memory\n\n### What Is a Rootkit?\n\nA rootkit is malware that operates at the kernel level to hide its presence from userspace tools. Traditional detection methods (ps, ls, netstat) are useless because the rootkit intercepts their system calls and filters out malicious entries.\n\nMemory forensics bypasses rootkits by analyzing raw kernel data structures directly, without relying on compromised system calls.\n\n### Kernel Module-Based Rootkits\n\nLinux rootkits commonly deploy as Loadable Kernel Modules (LKMs):\n\n1. **Module insertion** — `insmod malicious.ko` loads the rootkit into kernel space\n2. **Module hiding** — The rootkit removes itself from the module list but remains in memory\n3. **Syscall hooking** — Intercepts system calls (read, getdents, kill) to filter results\n4. **Process hiding** — Removes target processes from the task list so `ps` can't see them\n\n### Signal-Based Process Hiding\n\nSome rootkits use custom signals (e.g., signal 64) to toggle process visibility:\n- Send signal 64 to a PID → process becomes hidden from `ps`\n- Send signal 64 again → process becomes visible\n\nThis mechanism allows selective hiding without requiring hardcoded PID lists.\n\n### nfnetlink Masquerading\n\nAdvanced rootkits disguise their kernel module as a legitimate networking component like `nfnetlink` (Netfilter kernel/userspace communication). This masquerade:\n- Uses a legitimate-sounding module name\n- Loads from an expected directory path\n- Registers expected symbols\n\nDetection requires comparing loaded module metadata against known-good baselines.\n\n### Volatility Linux Module Analysis\n\n| Plugin | Detection Purpose |\n|--------|------------------|\n| `linux_check_modules` | Compare module list vs. sysfs — finds hidden modules |\n| `linux_hidden_modules` | Detect modules removed from the list but still in memory |\n| `linux_check_syscall` | Find hooked system call table entries |\n| `linux_check_idt` | Detect interrupt descriptor table hooks |",
+    "toolReferences": [
+      {
+        "tool": "Volatility 2 (Linux)",
+        "commands": [
+          "vol.py -f memory.lime --profile=<LinuxProfile> linux_check_modules",
+          "vol.py -f memory.lime --profile=<LinuxProfile> linux_hidden_modules",
+          "vol.py -f memory.lime --profile=<LinuxProfile> linux_check_syscall",
+          "vol.py -f memory.lime --profile=<LinuxProfile> linux_lsmod",
+          "vol.py -f memory.lime --profile=<LinuxProfile> linux_pslist",
+          "vol.py -f memory.lime --profile=<LinuxProfile> linux_psxview"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "This is a Linux rootkit investigation — standard userspace tools on the live system would show nothing because the rootkit hides itself.",
+      "Use linux_check_modules to compare the kernel module list against sysfs entries. Discrepancies reveal hidden or tampered modules.",
+      "Use linux_hidden_modules to find modules that removed themselves from the standard module list but still exist in kernel memory.",
+      "Check for syscall table hooks with linux_check_syscall — rootkits often hook getdents (directory listing) and kill (signal handling).",
+      "The rootkit uses signal 64 to hide processes. Look for evidence of this mechanism in the kernel module code or bash history.",
+      "The malicious module masquerades as nfnetlink — compare its properties against a legitimate nfnetlink module to spot differences.",
+      "Use linux_psxview to cross-reference process lists from multiple sources. Processes visible in one method but not another indicate rootkit hiding.",
+      "Look for the rootkit's initialization function in the kernel module — it typically hooks syscall table entries and registers signal handlers."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A Linux server is suspected of hosting a kernel-level rootkit. System administrators noticed anomalies but standard tools show nothing unusual. A memory dump was captured for offline analysis where the rootkit cannot interfere with your investigation.\n\n**Key Artifacts:**\n- Linux memory dump\n- Kernel-level rootkit using LKM-based hiding\n- Signal 64-based process hiding mechanism\n- nfnetlink module masquerade",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Set up the Linux profile and verify",
+        "command": "vol.py -f memory.lime --profile=<LinuxProfile> linux_pslist",
+        "explanation": "Load the appropriate Linux profile and list processes. Even this basic listing from memory may show processes that were invisible to the live system's ps command, since we're reading raw kernel structures."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Detect hidden kernel modules",
+        "command": "vol.py -f memory.lime --profile=<LinuxProfile> linux_check_modules",
+        "explanation": "Compare the kernel's internal module list against the sysfs representation. Hidden modules will appear in one list but not the other. This is the primary method for detecting LKM rootkits."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Find modules removed from the list",
+        "command": "vol.py -f memory.lime --profile=<LinuxProfile> linux_hidden_modules",
+        "explanation": "Specifically scan for kernel modules that unlinked themselves from the module list after loading. The module's code and data structures remain in kernel memory even after delisting."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Check for syscall table hooks",
+        "command": "vol.py -f memory.lime --profile=<LinuxProfile> linux_check_syscall",
+        "explanation": "Examine the system call table for hooked entries. The rootkit replaces legitimate syscall handlers (getdents64, kill) with its own functions that filter results. Hooked entries will point to addresses outside the normal kernel text range."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Cross-reference process visibility",
+        "command": "vol.py -f memory.lime --profile=<LinuxProfile> linux_psxview",
+        "explanation": "Compare process lists from multiple kernel data sources (task list, PID hash table, etc.). Processes hidden by the rootkit will be visible through one mechanism but not others, confirming the hiding technique."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Analyze the masquerading module",
+        "command": "vol.py -f memory.lime --profile=<LinuxProfile> linux_lsmod",
+        "explanation": "List all loaded kernel modules with their sizes and dependencies. The rootkit disguises itself as nfnetlink — compare the module size, load address, and dependency list against known-good values to identify the impersonation."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Identify the signal-based hiding mechanism",
+        "command": "strings memory.lime | grep -i 'signal\\|hide\\|unhide\\|kill'",
+        "explanation": "Search for strings related to the signal-based process hiding mechanism. The rootkit intercepts the kill syscall and checks for signal 64 — when received, it toggles process visibility rather than forwarding the signal."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "constellation",
+    "nextChallengeId": "lockpick3"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "id": "log-analysis",
+  "name": "Log Analysis & SIEM",
+  "overview": "Log analysis is the backbone of detection and incident response. Every attacker leaves traces in logs — authentication events, process creation, service installations, firewall changes, and PowerShell execution. In this learning path, you'll progress from parsing individual log files to correlating artifacts across multiple sources to reconstruct full attack timelines.\n\nYou'll work with Windows Event Logs (Security, Sysmon, PowerShell, Defender), Linux auth logs, web server access logs, Suricata IDS alerts, and cloud audit trails. These are the same skills used daily by SOC analysts, detection engineers, and incident responders.",
+  "prerequisites": [
+    "Basic understanding of Windows and Linux operating systems",
+    "Familiarity with command-line tools (grep, jq, PowerShell basics)",
+    "Understanding of Active Directory concepts (domains, authentication, Kerberos)",
+    "A HackTheBox account (free tier is sufficient for most challenges)"
+  ],
+  "coreTools": [
+    {
+      "name": "EvtxECmd (Eric Zimmerman)",
+      "description": "Command-line tool for parsing Windows Event Log (.evtx) files into CSV/JSON for analysis",
+      "installCommands": {
+        "linux": "Download from ericzimmerman.github.io (requires .NET or Wine)",
+        "macos": "Download from ericzimmerman.github.io (requires .NET)",
+        "windows": "Download from ericzimmerman.github.io"
+      }
+    },
+    {
+      "name": "Chainsaw",
+      "description": "Fast Windows event log hunting tool with Sigma rule support — built in Rust for speed",
+      "installCommands": {
+        "linux": "cargo install chainsaw / Download from GitHub releases",
+        "macos": "cargo install chainsaw / Download from GitHub releases",
+        "windows": "Download from GitHub releases"
+      }
+    },
+    {
+      "name": "Timeline Explorer",
+      "description": "GUI spreadsheet tool optimized for large forensic CSV files — essential companion for EvtxECmd output",
+      "installCommands": {
+        "linux": "Not natively supported — use Wine or a Windows VM",
+        "macos": "Not natively supported — use a Windows VM",
+        "windows": "Download from ericzimmerman.github.io"
+      }
+    },
+    {
+      "name": "jq",
+      "description": "Command-line JSON processor — essential for parsing Suricata alerts, CloudTrail logs, and JSON-formatted event data",
+      "installCommands": {
+        "linux": "sudo apt install jq / yay -S jq",
+        "macos": "brew install jq",
+        "windows": "choco install jq / Download from jqlang.github.io"
+      }
+    }
+  ],
+  "entryRecommendation": "Start with **Brutus** if you're new to log analysis — it covers Linux `auth.log` parsing with basic grep/cut commands. If you're already comfortable with Linux logs and want to jump into Windows, start at **Unit42** for Sysmon log analysis. If you're confident with individual log sources and want multi-artifact correlation, skip to **Logjammer**."
+}

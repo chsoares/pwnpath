@@ -1,0 +1,122 @@
+{
+  "challengeId": "logjammer",
+  "name": "Logjammer",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Logjammer",
+  "difficulty": "easy",
+  "estimatedTime": "2-3 hours",
+  "keyTakeaway": "Multi-source Windows event log analysis — correlating Security, System, Defender, Firewall, and PowerShell logs to reconstruct an attack chain",
+  "tags": ["Windows Event Logs", "EvtxECmd", "Event ID 4624", "Event ID 2004", "Event ID 4698", "Windows Defender", "SharpHound", "scheduled tasks", "firewall rules", "anti-forensics", "log clearing"],
+  "fundamentals": {
+    "content": "## Multi-Source Windows Event Log Correlation\n\n### Why Multiple Log Sources Matter\n\nNo single Windows Event Log tells the complete story. An attacker's actions span multiple subsystems — authentication (Security), service management (System), antivirus (Defender), network rules (Firewall), and script execution (PowerShell). Correlating across all five reveals the full attack narrative.\n\n### The Five Log Sources\n\n| Log File | Key Event IDs | What It Records |\n|----------|--------------|----------------|\n| Security.evtx | 4624, 4698, 4719, 1102 | Logons, scheduled tasks, policy changes, log clearing |\n| System.evtx | 7045 | Service installations |\n| Defender Operational.evtx | 1116, 1117 | Threat detections and actions taken |\n| Firewall.evtx | 2004, 2006 | Rules added/modified/deleted |\n| PowerShell Operational.evtx | 4104 | Script Block Logging (full command capture) |\n\n### Anti-Forensics Detection\n\nAttackers often clear event logs to cover their tracks. However, **Event ID 1102** in the Security log records when any audit log is cleared — including which log was wiped. This means the act of clearing a log is itself logged, creating an ironic detection opportunity.\n\n### Scheduled Task Forensics\n\n**Event ID 4698** (Security log) records scheduled task creation with the full XML definition embedded in the event data. This XML contains the task name, trigger, action (executable path), and arguments — critical for identifying persistence mechanisms.",
+    "toolReferences": [
+      {
+        "tool": "EvtxECmd",
+        "commands": [
+          "EvtxECmd.exe -d ./logs/ --csv . --csvf all_logs.csv (parse all EVTX files)",
+          "EvtxECmd.exe -f Security.evtx --inc 4624,4698,1102 --csv . (specific Event IDs)"
+        ]
+      },
+      {
+        "tool": "Timeline Explorer",
+        "commands": [
+          "Open the CSV output in Timeline Explorer for column filtering and sorting",
+          "Filter by EventId column, sort by TimeCreated for chronological analysis"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Parse all five EVTX files with EvtxECmd and load them into Timeline Explorer for easy filtering.",
+      "For the first login, filter Security.evtx for Event ID 4624 where the target username is 'cyberjunkie' and logon type is 2 (interactive).",
+      "Firewall rule changes are logged in the Firewall EVTX as Event ID 2004. The rule name and direction are in the event data.",
+      "Audit policy changes are Event ID 4719 in the Security log. The subcategory GUID needs to be mapped to a human-readable name.",
+      "Scheduled task creation is Event ID 4698 in the Security log. The XML payload contains the task name, script path, and arguments.",
+      "Windows Defender logs threat detections as Event ID 1116/1117. The event data contains the tool name, file path, and action taken.",
+      "PowerShell Script Block Logging (Event ID 4104) captures the exact commands the user typed.",
+      "Log clearing is recorded as Event ID 1102 in the Security log — check which log file was targeted."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A system was potentially compromised. You're given five Windows Event Log files to analyze: Security, System, Windows Defender, Firewall, and PowerShell Operational.\n\n**Analysis Strategy:** Parse all EVTX files to CSV with EvtxECmd, then use Timeline Explorer for filtering and correlation.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Find the first successful login",
+        "command": "Filter Security.evtx: EventId==4624, TargetUserName=='cyberjunkie', LogonType==2",
+        "explanation": "Event ID 4624 records successful logons. Filter for the target user and LogonType 2 (interactive/console logon). The first successful login was `27/03/2023 14:37:09` UTC. **Answer: `27/03/2023 14:37:09`**"
+      },
+      {
+        "stepNumber": 2,
+        "description": "Find the added firewall rule",
+        "command": "Filter Firewall.evtx: EventId==2004",
+        "explanation": "Event ID 2004 logs firewall rule additions. The attacker created a rule named `Metasploit C2 Bypass` — a blatantly named outbound rule to allow Metasploit traffic through the firewall. **Answer: `Metasploit C2 Bypass`**"
+      },
+      {
+        "stepNumber": 3,
+        "description": "Find the firewall rule direction",
+        "command": "Check the Direction field in the Event ID 2004 entry",
+        "explanation": "The rule was configured as `Outbound`, allowing the compromised system to make outbound connections to the C2 server. **Answer: `Outbound`**"
+      },
+      {
+        "stepNumber": 4,
+        "description": "Find the changed audit policy subcategory",
+        "command": "Filter Security.evtx: EventId==4719",
+        "explanation": "Event ID 4719 records audit policy changes. The attacker modified the `Other Object Access Events` subcategory — likely to disable logging of certain activities. **Answer: `Other Object Access Events`**"
+      },
+      {
+        "stepNumber": 5,
+        "description": "Find the scheduled task name",
+        "command": "Filter Security.evtx: EventId==4698",
+        "explanation": "Event ID 4698 records scheduled task creation. The XML payload reveals a task named `HTB-AUTOMATION`. **Answer: `HTB-AUTOMATION`**"
+      },
+      {
+        "stepNumber": 6,
+        "description": "Find the scheduled script path",
+        "command": "Parse the XML from Event ID 4698",
+        "explanation": "The task's Action element contains the script: `C:\\Users\\CyberJunkie\\Desktop\\Automation-HTB.ps1`. **Answer: `C:\\Users\\CyberJunkie\\Desktop\\Automation-HTB.ps1`**"
+      },
+      {
+        "stepNumber": 7,
+        "description": "Find the task arguments",
+        "command": "Parse the Arguments element from the task XML",
+        "explanation": "The scheduled task passes `-A cyberjunkie@hackthebox.eu` as arguments to the PowerShell script. **Answer: `-A cyberjunkie@hackthebox.eu`**"
+      },
+      {
+        "stepNumber": 8,
+        "description": "Identify the detected malware",
+        "command": "Filter Defender Operational.evtx: EventId==1117",
+        "explanation": "Windows Defender Event ID 1117 records threat actions taken. It detected `Sharphound` — the data collector for BloodHound, used to map Active Directory attack paths. **Answer: `Sharphound`**"
+      },
+      {
+        "stepNumber": 9,
+        "description": "Find the malware file path",
+        "command": "Check the Path field in the Defender event",
+        "explanation": "The full path to the detected file: `C:\\Users\\CyberJunkie\\Downloads\\SharpHound-v1.1.0.zip`. **Answer: `C:\\Users\\CyberJunkie\\Downloads\\SharpHound-v1.1.0.zip`**"
+      },
+      {
+        "stepNumber": 10,
+        "description": "Find the antivirus action",
+        "command": "Check the Action field in Event ID 1117",
+        "explanation": "Defender's response was `Quarantine` — it isolated the file to prevent execution. **Answer: `Quarantine`**"
+      },
+      {
+        "stepNumber": 11,
+        "description": "Find the PowerShell command executed",
+        "command": "Filter PowerShell Operational.evtx: EventId==4104",
+        "explanation": "Script Block Logging captured the user running `Get-FileHash -Algorithm md5 .\\Desktop\\Automation-HTB.ps1` — calculating the MD5 hash of their persistence script. **Answer: `Get-FileHash -Algorithm md5 .\\Desktop\\Automation-HTB.ps1`**"
+      },
+      {
+        "stepNumber": 12,
+        "description": "Find which log was cleared",
+        "command": "Filter Security.evtx: EventId==1102",
+        "explanation": "Event ID 1102 records audit log clearing. The attacker wiped the `Microsoft-Windows-Windows Firewall With Advanced Security/Firewall` log to hide the C2 bypass rule they created. Ironically, the clearing itself is recorded in the Security log. **Answer: `Microsoft-Windows-Windows Firewall With Advanced Security/Firewall`**"
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "campfire-1",
+    "nextChallengeId": "campfire-2"
+  }
+}

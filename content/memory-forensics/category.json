@@ -1,0 +1,50 @@
+{
+  "id": "memory-forensics",
+  "name": "Memory Forensics",
+  "overview": "Memory forensics is the analysis of volatile data captured from a system's RAM. Unlike disk forensics, memory analysis reveals what was actively running at the time of capture — processes, network connections, injected code, encryption keys, clipboard contents, and command history that may never touch disk.\n\nIn this learning path, you'll master Volatility (both v2 and v3), progressing from basic process listing and command history recovery to advanced techniques like detecting reflective DLL injection, analyzing Linux rootkits, and building custom Volatility profiles. You'll work with real HackTheBox Sherlocks and Challenges that simulate real-world incident response scenarios.",
+  "prerequisites": [
+    "Basic understanding of operating system internals (processes, memory, DLLs)",
+    "Familiarity with command-line interfaces (both Linux and Windows)",
+    "Understanding of common malware techniques (process injection, C2 communication)",
+    "A HackTheBox account (free tier is sufficient for most challenges)"
+  ],
+  "coreTools": [
+    {
+      "name": "Volatility 3",
+      "description": "The current standard for memory forensics — Python 3 framework with plugin-based architecture for analyzing memory dumps",
+      "installCommands": {
+        "linux": "pip install volatility3 / git clone https://github.com/volatilityfoundation/volatility3",
+        "macos": "pip install volatility3",
+        "windows": "pip install volatility3"
+      }
+    },
+    {
+      "name": "Volatility 2",
+      "description": "Legacy but still widely used — some plugins and profiles not yet ported to v3. Required for certain challenges",
+      "installCommands": {
+        "linux": "git clone https://github.com/volatilityfoundation/volatility (requires Python 2)",
+        "macos": "git clone https://github.com/volatilityfoundation/volatility",
+        "windows": "Standalone executable from volatilityfoundation.org"
+      }
+    },
+    {
+      "name": "CyberChef",
+      "description": "Web-based data transformation tool — essential for decoding Base64, deobfuscating PowerShell, and processing extracted artifacts",
+      "installCommands": {
+        "linux": "https://gchq.github.io/CyberChef/ (web-based, no install needed)",
+        "macos": "https://gchq.github.io/CyberChef/ (web-based, no install needed)",
+        "windows": "https://gchq.github.io/CyberChef/ (web-based, no install needed)"
+      }
+    },
+    {
+      "name": "strings",
+      "description": "Extract printable strings from binary files — quick triage tool for memory dumps before full Volatility analysis",
+      "installCommands": {
+        "linux": "Pre-installed (binutils package)",
+        "macos": "Pre-installed",
+        "windows": "Part of Sysinternals Suite (strings.exe)"
+      }
+    }
+  ],
+  "entryRecommendation": "Start with **Export** if you're completely new to memory forensics — it introduces basic Volatility commands like `pslist` and `cmdscan` on a simple Windows memory dump. If you're already familiar with Volatility basics, skip to **Recollection** for a comprehensive 15-question Sherlock that covers the full analysis workflow. For Linux memory forensics, start at **APTNightmare** (position 8)."
+}

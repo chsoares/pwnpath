@@ -1,0 +1,88 @@
+{
+  "challengeId": "constellation",
+  "name": "Constellation",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Constellation",
+  "difficulty": "medium",
+  "estimatedTime": "2-3 hours",
+  "keyTakeaway": "OSINT-enriched memory forensics — extracting URLs and artifacts from a memory dump and using open-source intelligence techniques to identify malicious entities, data exfiltration endpoints, and threat actor infrastructure",
+  "tags": ["memory forensics", "OSINT", "URL analysis", "data exfiltration", "strings", "threat intelligence"],
+  "fundamentals": {
+    "content": "## OSINT-Driven Memory Forensics\n\n### When Memory Meets OSINT\n\nSome memory forensics investigations go beyond technical artifact extraction. The data found in memory — URLs, domains, email addresses, file hashes — must be enriched with open-source intelligence to answer investigative questions:\n\n- **Who** is behind the attack? (Actor attribution)\n- **What** infrastructure do they use? (C2, exfil endpoints)\n- **Where** did the data go? (Exfiltration destinations)\n- **How** does this connect to known campaigns? (TTP correlation)\n\n### URL and String Extraction from Memory\n\nBefore diving into Volatility plugins, raw string extraction can reveal a wealth of information:\n\n```bash\nstrings -a memory.raw | grep -iE 'http://|https://' | sort -u\nstrings -a memory.raw | grep -iE '@.*\\.' | sort -u   # emails\nstrings -a memory.raw | grep -oE '([0-9]{1,3}\\.){3}[0-9]{1,3}' | sort -u  # IPs\n```\n\n### OSINT Enrichment Sources\n\n| Source | Purpose |\n|--------|--------|\n| VirusTotal | Hash/URL/domain reputation |\n| URLhaus | Known malicious URL database |\n| Shodan | Infrastructure reconnaissance |\n| WHOIS | Domain registration details |\n| PassiveTotal | Passive DNS and infrastructure mapping |\n| Twitter/X | Threat researcher IOC sharing |\n\n### Data Exfiltration Indicators\n\nSigns of data exfiltration in memory:\n- URLs pointing to cloud storage (pastebin, file.io, transfer.sh)\n- Base64-encoded data in HTTP POST bodies\n- DNS TXT record queries with encoded data\n- Connections to uncommon ports or unusual geographic destinations",
+    "toolReferences": [
+      {
+        "tool": "String extraction",
+        "commands": [
+          "strings -a -n 8 memory.raw | grep -iE 'http://|https://' | sort -u",
+          "strings -a memory.raw | grep -iE 'pastebin|file.io|transfer.sh|mega.nz'",
+          "strings -a memory.raw | grep -oE '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}' | sort -u"
+        ]
+      },
+      {
+        "tool": "OSINT tools",
+        "commands": [
+          "whois <domain>",
+          "curl -s 'https://www.virustotal.com/api/v3/domains/<domain>' -H 'x-apikey: <key>'",
+          "nslookup <domain>"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "This challenge emphasizes OSINT over pure technical memory analysis — you'll need to research entities found in the memory dump.",
+      "Start with broad string extraction to pull URLs, domains, IPs, and email addresses from the memory dump.",
+      "Not every URL in memory is malicious — filter out known-good Microsoft, Google, and CDN domains to focus on suspicious ones.",
+      "Use VirusTotal and URLhaus to check suspicious URLs and domains for known malicious associations.",
+      "Look for data exfiltration indicators: cloud storage services, paste sites, or file sharing platforms in the extracted URLs.",
+      "WHOIS data on suspicious domains can reveal registration dates, registrants, and geographic information useful for attribution.",
+      "Cross-reference findings with threat intelligence reports — the infrastructure may be linked to known campaigns or threat groups.",
+      "Some answers require combining memory artifacts with OSINT research — the memory tells you WHAT, the OSINT tells you WHO and WHY."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A memory dump has been captured from a compromised system. Your investigation focuses on identifying malicious URLs, data exfiltration endpoints, and threat actor infrastructure using a combination of memory forensics and OSINT techniques.\n\n**Key Artifacts:**\n- Memory dump with embedded URLs and network artifacts\n- Requires external OSINT research for complete answers",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Extract all URLs from the memory dump",
+        "command": "strings -a -n 8 memory.raw | grep -iE 'http://|https://' | sort -u > urls.txt",
+        "explanation": "Pull all URL strings from the memory dump. The -n 8 flag filters for strings of at least 8 characters to reduce noise. Sort and deduplicate to create a manageable list for analysis."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Filter suspicious URLs",
+        "command": "cat urls.txt | grep -viE 'microsoft.com|google.com|windows.com|windowsupdate.com|bing.com' | less",
+        "explanation": "Remove known-good domains to focus on potentially malicious URLs. Look for unusual domains, paste sites, file sharing services, or domains with suspicious TLDs."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Extract IP addresses and email addresses",
+        "command": "strings -a memory.raw | grep -oE '([0-9]{1,3}\\.){3}[0-9]{1,3}' | sort -u | grep -v '^\\(10\\|172\\.\\(1[6-9]\\|2[0-9]\\|3[01]\\)\\|192\\.168\\)'",
+        "explanation": "Extract public IP addresses from memory, filtering out RFC1918 private ranges. These external IPs may represent C2 servers, exfiltration endpoints, or other attacker infrastructure."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Research suspicious domains with WHOIS",
+        "command": "whois <suspicious_domain>",
+        "explanation": "Check domain registration details for suspicious domains found in memory. Recently registered domains, privacy-protected registrations, or domains registered in unexpected countries are red flags."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Check indicators against threat intelligence",
+        "command": "Check URLs, domains, and IPs against VirusTotal, URLhaus, and AbuseIPDB",
+        "explanation": "Enrich extracted indicators with threat intelligence databases. Known malicious indicators will have detection flags, associated malware families, and community comments providing context."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Identify data exfiltration endpoints",
+        "command": "grep -iE 'pastebin|hastebin|file.io|transfer.sh|mega.nz|dropbox' urls.txt",
+        "explanation": "Search specifically for known data exfiltration services. Attackers commonly use legitimate file sharing and paste services to exfiltrate stolen data, making it harder to block at the network level."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "aptnightmare",
+    "nextChallengeId": "aptnightmare2"
+  }
+}

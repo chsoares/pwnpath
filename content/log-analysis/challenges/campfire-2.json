@@ -1,0 +1,92 @@
+{
+  "challengeId": "campfire-2",
+  "name": "Campfire-2",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Campfire-2",
+  "difficulty": "easy",
+  "estimatedTime": "2-3 hours",
+  "keyTakeaway": "AS-REP Roasting detection — filtering Kerberos authentication events (Event ID 4768) to identify attacks against accounts without preauthentication",
+  "tags": ["AS-REP Roasting", "Event ID 4768", "Kerberos", "EvtxECmd", "Active Directory", "preauthentication", "encryption type"],
+  "fundamentals": {
+    "content": "## AS-REP Roasting Detection via Event Logs\n\n### What Is AS-REP Roasting?\n\nAS-REP Roasting targets Active Directory accounts that have **Kerberos preauthentication disabled** (`DONT_REQUIRE_PREAUTH` flag). Normally, when a user requests a TGT (Ticket Granting Ticket), the KDC requires the user to prove their identity first by encrypting a timestamp with their password hash. When preauthentication is disabled, the KDC returns an AS-REP containing the TGT encrypted with the user's password hash — **without any proof of identity**.\n\nThis means an attacker can:\n1. **Enumerate** accounts with preauthentication disabled\n2. **Request** AS-REP responses for those accounts\n3. **Crack** the encrypted portion offline to recover the plaintext password\n\n### How It Differs from Kerberoasting\n\n| Aspect | Kerberoasting | AS-REP Roasting |\n|--------|--------------|----------------|\n| Target | Service accounts (SPNs) | User accounts (no preauth) |\n| Event ID | 4769 (TGS request) | 4768 (TGT request) |\n| Prerequisite | Any domain user | No authentication needed |\n| Encryption indicator | RC4 (0x17) in TGS | RC4 (0x17) in AS-REP |\n\n### Detection: Event ID 4768\n\nThe Domain Controller logs every TGT request as **Event ID 4768** (Kerberos Authentication Service). The critical detection indicators are:\n\n- **Encryption Type 0x17** (RC4-HMAC) — attackers request RC4 because it's faster to crack than AES\n- **Result Code 0x0** — indicates a successful AS-REP response\n- **Target accounts** that have preauthentication disabled\n\n### Correlating with Other Events\n\nAfter identifying the AS-REP Roasting event, correlate with:\n- **Event ID 4769** — subsequent TGS requests from the same source (lateral movement)\n- **Event ID 5140** — network share access that may indicate data exfiltration",
+    "toolReferences": [
+      {
+        "tool": "EvtxECmd",
+        "commands": [
+          "EvtxECmd.exe -f Security.evtx --json . --jsonf security.json",
+          "jq 'select(.EventId==4768)' security.json (Kerberos TGT requests)",
+          "jq 'select(.EventId==4768) | select(.TicketEncryptionType==\"0x17\")' security.json (filter for RC4)"
+        ]
+      },
+      {
+        "tool": "Timeline Explorer",
+        "commands": [
+          "Open CSV output in Timeline Explorer",
+          "Filter EventId=4768, sort by TimeCreated"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start with the DC Security Event Log — filter for Event ID 4768 (Kerberos Authentication Service).",
+      "The key indicator for AS-REP Roasting is the encryption type: 0x17 (RC4-HMAC) in the TGT request. Normal requests use AES (0x12 or 0x11).",
+      "Check which user accounts were targeted — look for accounts with the DONT_REQUIRE_PREAUTH flag enabled.",
+      "The attacker IP is in the IpAddress field of the 4768 event. Cross-reference this with other events.",
+      "After the AS-REP Roasting event, look for Event ID 4769 from the same source — this shows the attacker using compromised credentials.",
+      "Check Event ID 5140 for network share access from the attacker IP — this may reveal lateral movement or data access.",
+      "The timestamp of the initial 4768 event with RC4 encryption is the moment the AS-REP Roasting attack occurred."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A Domain Controller's security logs show signs of an AS-REP Roasting attack. You need to identify the attack, the targeted account, and subsequent post-exploitation activity.\n\n**Key Artifacts:**\n- DC Security Event Log (Security.evtx)\n\n**Attack Chain:** Account enumeration -> AS-REP request with RC4 -> Credential cracking -> Lateral movement",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Parse the Security event log",
+        "command": "EvtxECmd.exe -f Security.evtx --csv . --csvf security.csv",
+        "explanation": "Convert the EVTX file to CSV for analysis. EvtxECmd parses all event fields including Kerberos ticket details that are critical for detecting AS-REP Roasting."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Filter for AS-REP Roasting indicators",
+        "command": "Filter EventId==4768 with TicketEncryptionType==0x17",
+        "explanation": "Event ID 4768 logs Kerberos Authentication Service (AS) requests. Filter for encryption type 0x17 (RC4-HMAC) — this is the hallmark of AS-REP Roasting. Normal modern Kerberos uses AES256 (0x12). The timestamp of this event marks when the attack occurred."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Identify the targeted user account",
+        "command": "Check the TargetUserName field in the 4768 event",
+        "explanation": "The TargetUserName field reveals which account was targeted. This account has the DONT_REQUIRE_PREAUTH flag set in Active Directory, making it vulnerable to AS-REP Roasting. This misconfiguration allowed the attacker to request its TGT without authentication."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Find the attacker's source IP",
+        "command": "Check the IpAddress field in the 4768 event",
+        "explanation": "The IpAddress field in the 4768 event shows where the AS-REP request originated. This is the attacker's workstation on the network."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Correlate with TGS requests",
+        "command": "Filter EventId==4769 with the same source IP",
+        "explanation": "After cracking the AS-REP hash, the attacker uses the compromised credentials to request TGS tickets (Event ID 4769). Look for TGS requests from the same source IP — these show what services the attacker accessed with the cracked credentials."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Check for network share access",
+        "command": "Filter EventId==5140 with the attacker IP",
+        "explanation": "Event ID 5140 logs network share access. Filter for the attacker's IP to see if they accessed any file shares after compromising the account. This reveals the attacker's post-exploitation objectives — whether they accessed sensitive shares or moved laterally."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Build the attack timeline",
+        "command": "Sort all correlated events by TimeCreated",
+        "explanation": "Combining 4768 (AS-REP Roasting), 4769 (service access), and 5140 (share access) events from the attacker IP into a chronological timeline reveals the complete attack narrative: initial credential theft, offline cracking period, and subsequent lateral movement."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "logjammer",
+    "nextChallengeId": "crownjewel-1"
+  }
+}

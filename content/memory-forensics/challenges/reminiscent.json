@@ -1,0 +1,90 @@
+{
+  "challengeId": "reminiscent",
+  "name": "Reminiscent",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/Reminiscent",
+  "difficulty": "easy",
+  "estimatedTime": "1.5 hours",
+  "keyTakeaway": "Phishing attack reconstruction — analyzing a memory dump alongside a phishing email to trace how a malicious document triggered PowerShell execution with multi-layered Base64 encoding",
+  "tags": ["Volatility", "phishing", "PowerShell", "Base64", "CyberChef", "email forensics", "ELF memory dump"],
+  "fundamentals": {
+    "content": "## Phishing-to-Execution Chain in Memory\n\n### Reconstructing the Attack from Memory\n\nPhishing attacks follow a predictable chain: email → attachment → exploit/macro → payload execution. Memory forensics lets you reconstruct this entire chain because the malicious processes and their artifacts persist in RAM even after the initial document is closed.\n\n### ELF-format Memory Dumps\n\nSome memory acquisition tools (like VirtualBox `.elf` core dumps or LiME) produce memory in ELF format rather than raw. Volatility handles both formats, but you may need to confirm the profile works correctly with the specific format.\n\n### Multi-Layer Base64 Encoding\n\nAttackers frequently use multiple layers of encoding to evade detection:\n\n```\nOriginal payload\n  → Base64 encode\n    → Reverse string\n      → Base64 encode again\n```\n\nEach layer must be decoded in reverse order. CyberChef's \"Recipe\" feature is ideal for chaining multiple decode operations.\n\n### Thunderbird and Email-Borne Attacks\n\nWhen Thunderbird (or any email client) opens a malicious attachment, the process tree shows:\n1. `thunderbird.exe` as parent\n2. Office application (Word, Excel) as child\n3. `cmd.exe` or `powershell.exe` spawned by the Office app\n\nThis parent-child relationship in `pstree` is direct evidence of the phishing execution chain.",
+    "toolReferences": [
+      {
+        "tool": "Volatility 2",
+        "commands": [
+          "vol.py -f memory.elf imageinfo",
+          "vol.py -f memory.elf --profile=<profile> pslist",
+          "vol.py -f memory.elf --profile=<profile> psscan",
+          "vol.py -f memory.elf --profile=<profile> pstree",
+          "vol.py -f memory.elf --profile=<profile> filescan | grep -i resume",
+          "vol.py -f memory.elf --profile=<profile> dumpfiles -Q <offset> -D ./dump/"
+        ]
+      },
+      {
+        "tool": "CyberChef",
+        "commands": [
+          "From Base64 → Reverse → From Base64 (chain multiple operations)",
+          "Use 'Magic' recipe to auto-detect encoding layers"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "You have two artifacts: a memory dump (.elf) and a phishing email (.eml). Start by reading the email to understand the attack vector.",
+      "The email references an attachment — use filescan to locate that file in the memory dump.",
+      "Use pstree to visualize parent-child process relationships. Look for an email client spawning unexpected child processes.",
+      "PowerShell commands in memory often contain Base64-encoded payloads. Look for -EncodedCommand or -enc parameters.",
+      "The encoding is multi-layered — you may need to decode Base64, then reverse the string, then decode Base64 again.",
+      "CyberChef is your best friend for multi-layer decoding. Build a recipe that chains the decode operations.",
+      "After decoding all layers, the final payload reveals the attacker's C2 infrastructure and the flag.",
+      "Use dumpfiles to extract any suspicious files referenced by the malicious processes."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** An employee received a suspicious email with a resume attachment. A memory dump was captured from their workstation along with the original email. Investigate to determine the full attack chain.\n\n**Key Artifacts:**\n- `.elf` memory dump from the workstation\n- `Resume.eml` — the phishing email",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Analyze the phishing email",
+        "command": "cat Resume.eml",
+        "explanation": "Read the phishing email to identify the sender, subject, and attachment. The email poses as a job application with a resume attachment, which is a common social engineering tactic."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Profile the memory dump",
+        "command": "vol.py -f flounder-pc-memdump.elf imageinfo",
+        "explanation": "Determine the OS profile for the ELF-format memory dump. Even though the format is different from raw, Volatility can still analyze it with the correct profile."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Build the process tree",
+        "command": "vol.py -f flounder-pc-memdump.elf --profile=<profile> pstree",
+        "explanation": "Visualize the parent-child process hierarchy. Look for the email client (Thunderbird) spawning an Office application, which in turn spawns cmd.exe or powershell.exe — this is the phishing execution chain."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Scan for the malicious attachment",
+        "command": "vol.py -f flounder-pc-memdump.elf --profile=<profile> filescan | grep -iE 'resume|.doc|.xls'",
+        "explanation": "Locate the resume attachment file in memory. The FILE_OBJECT structures will show where the malicious document was cached, confirming it was opened on this machine."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Extract PowerShell command-line arguments",
+        "command": "vol.py -f flounder-pc-memdump.elf --profile=<profile> cmdline -p <powershell_pid>",
+        "explanation": "Extract the full command line for the PowerShell process. This reveals the encoded payload that was executed when the malicious document ran its macro or exploit."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Decode the multi-layered payload",
+        "command": "echo '<base64_payload>' | base64 -d | rev | base64 -d",
+        "explanation": "The payload uses multiple encoding layers. First decode from Base64, then reverse the resulting string, then decode Base64 again. Each layer peels away one level of obfuscation to reveal the actual malicious script and the flag."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "truesecrets",
+    "nextChallengeId": "recollection"
+  }
+}

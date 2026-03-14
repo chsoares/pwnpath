@@ -14,8 +14,8 @@
       "name": "Memory Forensics",
       "description": "Analyze volatile memory dumps using Volatility to uncover running processes, injected code, network connections, and evidence of compromise.",
       "icon": "memory",
-      "status": "coming_soon",
-      "challengeCount": 0,
+      "status": "available",
+      "challengeCount": 12,
       "focus": ["Volatility", "Process Analysis", "Memory Artifacts"]
     },
     {
@@ -32,9 +32,9 @@
       "name": "Log Analysis & SIEM",
       "description": "Parse and correlate logs from multiple sources to detect intrusions, lateral movement, and data exfiltration using SIEM techniques.",
       "icon": "logs",
-      "status": "coming_soon",
-      "challengeCount": 0,
-      "focus": ["ELK Stack", "Splunk", "Log Correlation", "Detection Rules"]
+      "status": "available",
+      "challengeCount": 12,
+      "focus": ["EvtxECmd", "Chainsaw", "Log Correlation", "Detection Engineering"]
     },
     {
       "id": "malware-analysis",

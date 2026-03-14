@@ -1,0 +1,93 @@
+{
+  "challengeId": "ticktock",
+  "name": "Tick Tock",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/TickTock",
+  "difficulty": "medium",
+  "estimatedTime": "3-4 hours",
+  "keyTakeaway": "Remote access and C2 detection — analyzing TeamViewer artifacts, Merlin C2 agent traces, and system time manipulation through event logs",
+  "tags": ["TeamViewer", "Merlin C2", "Windows Defender", "anti-forensics", "time manipulation", "remote access", "Event ID 4616", "social engineering"],
+  "fundamentals": {
+    "content": "## Remote Access Tool Forensics and Anti-Forensics Detection\n\n### TeamViewer Artifacts\n\nTeamViewer is a legitimate remote access tool frequently abused by attackers. It leaves extensive forensic traces:\n\n| Artifact | Location | Content |\n|----------|----------|---------|\n| Connections_incoming.txt | TeamViewer install dir | Incoming connection log with partner ID, display name, timestamps |\n| TeamViewer_Logfile.log | TeamViewer install dir | Detailed session log with IPs and actions |\n| Windows Event Logs | Application.evtx | TeamViewer service events |\n\nThe `Connections_incoming.txt` file is forensically valuable because it records the **TeamViewer ID** and **display name** of anyone who connected, along with session start/end times.\n\n### Merlin C2 Framework\n\nMerlin is an open-source Command & Control framework written in Go that communicates over HTTP/2 (h2) and HTTP/3 (QUIC). Detection indicators include:\n\n- Unusual HTTP/2 traffic to non-standard ports\n- Go-compiled binary artifacts\n- Windows Defender detections for `Merlin` or `PoshC2Agent`\n- Prefetch files for the agent binary\n\n### Anti-Forensics: System Time Manipulation\n\nAttackers sometimes change the system clock to:\n- Corrupt log timestamps and break timeline analysis\n- Evade time-based detection rules\n- Create confusion about when events actually occurred\n\n**Event ID 4616** (Security log) records every system time change, including:\n- The previous time and the new time\n- The user account that changed it\n- The process that triggered the change\n\nThis is a critical anti-forensics detection event — any unexplained time changes during an incident are highly suspicious.\n\n### Windows Defender Event Logs\n\n**Event ID 1116** records threat detections, and **Event ID 1117** records actions taken. These events contain the detected threat name, file path, and the action taken (quarantine, remove, allow). Even if an attacker disables Defender afterward, the initial detection events persist.",
+    "toolReferences": [
+      {
+        "tool": "EvtxECmd",
+        "commands": [
+          "EvtxECmd.exe -d ./logs/ --csv . --csvf all_events.csv",
+          "Filter for EventId 4616 (time change events)",
+          "Filter for EventId 1116/1117 (Defender detections)"
+        ]
+      },
+      {
+        "tool": "TeamViewer log parsing",
+        "commands": [
+          "cat Connections_incoming.txt (incoming connection history)",
+          "cat TeamViewer15_Logfile.log | grep 'connection' (session details)"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start with the TeamViewer artifacts — Connections_incoming.txt reveals who connected remotely, when, and their TeamViewer display name.",
+      "The TeamViewer log file contains more granular session details including IP addresses and file transfer events.",
+      "After identifying the remote access session, look for what was executed during that window — check Prefetch and Defender logs.",
+      "Windows Defender Event ID 1116/1117 may have detected the C2 agent. The threat name in the event data identifies the specific tool.",
+      "For the time manipulation, filter Security logs for Event ID 4616 — this records every system clock change with before/after timestamps.",
+      "The gap between the old time and new time in the 4616 event reveals how far the attacker shifted the clock.",
+      "Correlate the TeamViewer session window with C2 agent deployment and time manipulation — they should overlap, revealing the attack sequence.",
+      "Check which user account was active during the attack — the social engineering pretext may be visible in the TeamViewer display name."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A user was social-engineered into installing TeamViewer and granting remote access. The attacker deployed a Merlin C2 agent and manipulated the system time to hinder forensic analysis.\n\n**Key Artifacts:**\n- TeamViewer logs (Connections_incoming.txt, logfile)\n- Windows Event Logs (Security, System, Defender)\n- Prefetch files\n\n**Attack Chain:** Social engineering -> TeamViewer remote access -> Merlin C2 deployment -> Time manipulation (anti-forensics)",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Analyze TeamViewer incoming connections",
+        "command": "cat Connections_incoming.txt",
+        "explanation": "The incoming connections log shows each remote session with the partner's TeamViewer ID, display name, connection start/end times. This identifies who connected and establishes the initial access window."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Extract detailed session information from TeamViewer logs",
+        "command": "grep -i 'connection\\|session\\|file' TeamViewer15_Logfile.log",
+        "explanation": "The detailed log file records granular session activity including the remote IP address, authentication method, and any file transfers. File transfers during the session may indicate the C2 agent being dropped to disk."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Check Windows Defender for C2 agent detection",
+        "command": "Filter Defender Operational.evtx: EventId==1116 or EventId==1117",
+        "explanation": "Windows Defender may have detected the Merlin C2 agent when it was written to disk or executed. Event ID 1116 shows the detection with the threat name (e.g., containing 'Merlin' or 'CobaltStrike') and the file path where the agent was dropped."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Identify the C2 agent binary via Prefetch",
+        "command": "PECmd.exe -d prefetch/ --csv . --csvf prefetch.csv",
+        "explanation": "Prefetch files prove binary execution with timestamps. Look for unusual executables that were run for the first time during the TeamViewer session window. The Merlin agent binary name and its execution timestamp will be visible."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Detect system time manipulation",
+        "command": "Filter Security.evtx: EventId==4616",
+        "explanation": "Event ID 4616 records system time changes. The event contains both the PreviousTime and NewTime fields, revealing exactly how the attacker manipulated the clock. The SubjectUserName shows which account performed the change — correlate this with the active session."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Calculate the time offset introduced",
+        "command": "Compare PreviousTime and NewTime fields in the 4616 event",
+        "explanation": "Calculate the difference between the old and new times. The attacker may have shifted the clock forward or backward to corrupt timestamps in subsequent log entries. This offset must be applied when reconstructing the true timeline of events."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Reconstruct the corrected attack timeline",
+        "command": "Combine all artifacts with time offset correction",
+        "explanation": "Build the complete timeline: social engineering call, TeamViewer session start, C2 agent deployment, Defender detection, time manipulation, and session end. Apply the time offset to events that occurred after the manipulation to recover accurate timestamps."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "bumblebee",
+    "nextChallengeId": "heartbreaker"
+  }
+}

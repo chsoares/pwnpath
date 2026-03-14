@@ -1,0 +1,105 @@
+{
+  "challengeId": "heartbreaker",
+  "name": "Heartbreaker",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Heartbreaker",
+  "difficulty": "medium",
+  "estimatedTime": "3-4 hours",
+  "keyTakeaway": "Multi-artifact phishing investigation — correlating email artifacts, Sysmon logs, browser history, and prefetch files to trace a full attack chain",
+  "tags": ["phishing", "Sysmon", "Chainsaw", "PECmd", "Prefetch", "email forensics", "AWS", "malware tracing", "Event ID 1"],
+  "fundamentals": {
+    "content": "## Multi-Artifact Phishing Attack Investigation\n\n### The Phishing Attack Chain\n\nModern phishing attacks leave traces across multiple artifact types. A complete investigation requires correlating:\n\n1. **Email artifacts** — The phishing email itself (headers, sender, attachment)\n2. **Sysmon logs** — Process creation, network connections, file creation\n3. **Browser history** — URLs visited as part of the attack chain\n4. **Prefetch files** — Proof of malware execution with timestamps\n\n### Sysmon for Malware Tracing\n\nSysmon (System Monitor) provides detailed logging that standard Windows event logs miss:\n\n| Sysmon Event ID | What It Records |\n|----------------|----------------|\n| 1 | Process creation with full command line and parent process |\n| 3 | Network connections with source/destination IPs |\n| 7 | Image loaded (DLL loading) |\n| 11 | File creation with target filename |\n| 13 | Registry value set |\n| 22 | DNS query with queried domain name |\n\n**Sysmon Event ID 1** is the most valuable: it records process creation with the complete command line AND the parent process, allowing you to build a **process tree** that shows exactly how the malware spawned child processes.\n\n### Chainsaw for Rapid Log Analysis\n\nChainsaw is a fast forensic tool that searches event logs using Sigma rules and built-in detections:\n```\nchainsaw hunt evtx_logs/ --sigma-rules sigma/ --mapping mapping.yml\n```\nIt rapidly identifies suspicious events without manual filtering.\n\n### PECmd for Prefetch Analysis\n\nPrefetch files prove that a binary was executed and record:\n- **Last 8 execution times** (Windows 10+)\n- **Run count** — how many times it was executed\n- **Referenced files** — DLLs and files accessed during execution\n\nEven if the malware binary is deleted, the Prefetch file persists as proof of execution.\n\n### Email Header Analysis\n\nPhishing email headers reveal:\n- **X-Originating-IP** — True sender IP\n- **Return-Path** — Where bounces go (often attacker-controlled)\n- **Received** headers — Mail server routing chain\n- **Content-Type** — Attachment MIME types and filenames",
+    "toolReferences": [
+      {
+        "tool": "Chainsaw",
+        "commands": [
+          "chainsaw hunt ./evtx/ -s sigma/ --mapping mappings/sigma-event-logs-all.yml",
+          "chainsaw search ./evtx/ -t 'Event.System.EventID: =1' (Sysmon process creation)"
+        ]
+      },
+      {
+        "tool": "PECmd",
+        "commands": [
+          "PECmd.exe -d prefetch/ --csv . --csvf prefetch.csv",
+          "PECmd.exe -f 'SUPERSTAR_MEMBERCARD.TIFF.EXE-XXXXX.pf'"
+        ]
+      },
+      {
+        "tool": "Email analysis",
+        "commands": [
+          "cat phishing_email.eml | grep -i 'from:\\|to:\\|subject:\\|x-originating'",
+          "munpack phishing_email.eml (extract attachments)"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start with the phishing email — examine the headers for the sender address, subject line, and attachment filename.",
+      "The attachment uses a double extension trick: .tiff.exe appears as a harmless image file to the victim.",
+      "Use Sysmon Event ID 1 to trace the malware execution chain — start from the attachment being opened and follow the parent-child process tree.",
+      "Sysmon Event ID 3 (network connections) reveals the C2 communication destinations after the malware executes.",
+      "Parse Prefetch files with PECmd to confirm execution timestamps and run counts for the malicious binary.",
+      "Check browser history for any URLs visited as part of the attack — the malware may have downloaded additional payloads.",
+      "Look for evidence of credential access — Sysmon events may show the malware accessing AWS credential files or environment variables.",
+      "Use Chainsaw to quickly hunt through the event logs with Sigma rules — it will flag known malicious patterns automatically."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A phishing email delivered a malicious attachment disguised as `Superstar_MemberCard.tiff.exe`. The malware executed, established C2 communication, and attempted to steal AWS credentials. You're provided with Sysmon logs, Prefetch files, browser history, and the original email.\n\n**Key Artifacts:**\n- Phishing email (.eml file)\n- Sysmon event logs\n- Prefetch files\n- Browser history\n\n**Attack Chain:** Phishing email -> Double-extension malware -> Execution -> C2 communication -> AWS credential theft",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Analyze the phishing email",
+        "command": "Examine the .eml file headers and body",
+        "explanation": "Extract key information from the phishing email: the sender address, subject line, and attachment filename. The attachment `Superstar_MemberCard.tiff.exe` uses the double-extension trick — Windows hides the .exe extension by default, making it appear as an innocent .tiff image."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Trace malware execution with Sysmon",
+        "command": "chainsaw search ./evtx/ -t 'Event.System.EventID: =1' | grep -i 'superstar'",
+        "explanation": "Sysmon Event ID 1 records process creation with full command lines and parent processes. Search for the malware filename to find when it was executed, by which user, and what parent process launched it (likely explorer.exe if double-clicked)."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Build the process tree",
+        "command": "Filter Sysmon EventId==1 by ParentProcessId to trace child processes",
+        "explanation": "Starting from the initial malware process, follow the ParentProcessId chain to see what child processes it spawned. This reveals the malware's behavior — it may have launched PowerShell, cmd.exe, or dropped additional executables."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Identify network connections",
+        "command": "Filter Sysmon EventId==3 for connections from the malware process",
+        "explanation": "Sysmon Event ID 3 records network connections with source and destination IPs/ports. Filter by the malware's process ID to find where it connected — this reveals the C2 server address and port."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Confirm execution with Prefetch",
+        "command": "PECmd.exe -d prefetch/ --csv . --csvf prefetch.csv",
+        "explanation": "Parse all Prefetch files and search for the malware binary. The Prefetch entry confirms execution and provides the exact timestamps, run count, and all files/DLLs referenced during execution."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Check for credential access",
+        "command": "Filter Sysmon EventId==11 for file creation in AWS credential paths",
+        "explanation": "Sysmon Event ID 11 records file creation events. Look for access to AWS credential files (e.g., `~/.aws/credentials`, `~/.aws/config`) or creation of files in temp directories that may contain stolen credentials."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Examine DNS queries",
+        "command": "Filter Sysmon EventId==22 for DNS queries from the malware process",
+        "explanation": "Sysmon Event ID 22 records DNS queries. Filter by the malware's process ID to see which domains it resolved — this may reveal additional C2 infrastructure, payload download URLs, or data exfiltration endpoints."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Reconstruct the full attack timeline",
+        "command": "Combine all artifact timestamps chronologically",
+        "explanation": "Build the end-to-end timeline: email delivery, user opening the attachment, malware execution (Prefetch), process spawning (Sysmon ID 1), C2 connection (Sysmon ID 3), credential access, and any data exfiltration. Each artifact corroborates the others."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "ticktock",
+    "nextChallengeId": "tracer"
+  }
+}

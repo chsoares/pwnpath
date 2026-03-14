@@ -1,0 +1,73 @@
+{
+  "categoryId": "memory-forensics",
+  "title": "Memory Forensics Cheatsheet",
+  "sections": [
+    {
+      "title": "Volatility 3 — Triage & System Info",
+      "commands": [
+        { "command": "vol -f dump.raw windows.info", "description": "Get OS version, build, and system time from memory dump" },
+        { "command": "vol -f dump.raw banners", "description": "Identify OS from memory dump (works for Linux too)" },
+        { "command": "vol -f dump.raw windows.envars", "description": "Display environment variables per process" }
+      ]
+    },
+    {
+      "title": "Volatility 3 — Process Analysis",
+      "commands": [
+        { "command": "vol -f dump.raw windows.pslist", "description": "List running processes (EPROCESS linked list)" },
+        { "command": "vol -f dump.raw windows.psscan", "description": "Scan for processes including hidden/unlinked ones" },
+        { "command": "vol -f dump.raw windows.pstree", "description": "Display process tree with parent-child relationships" },
+        { "command": "vol -f dump.raw windows.cmdline", "description": "Show command-line arguments for each process" },
+        { "command": "vol -f dump.raw windows.handles --pid 1234", "description": "List handles (files, registry keys, mutexes) for a process" },
+        { "command": "vol -f dump.raw windows.dlllist --pid 1234", "description": "List DLLs loaded by a specific process" }
+      ]
+    },
+    {
+      "title": "Volatility 3 — Memory Extraction",
+      "commands": [
+        { "command": "vol -f dump.raw windows.memmap --pid 1234 --dump", "description": "Dump full memory of a specific process" },
+        { "command": "vol -f dump.raw windows.dumpfiles --pid 1234", "description": "Extract files from process memory (DLLs, EXEs)" },
+        { "command": "vol -f dump.raw windows.filescan", "description": "Scan for FILE_OBJECT structures in memory" },
+        { "command": "vol -f dump.raw windows.dumpfiles --virtaddr 0xADDR", "description": "Dump a specific file by virtual address from filescan" }
+      ]
+    },
+    {
+      "title": "Volatility 3 — Network & Credentials",
+      "commands": [
+        { "command": "vol -f dump.raw windows.netscan", "description": "List network connections and listening sockets" },
+        { "command": "vol -f dump.raw windows.netstat", "description": "Show active network connections (similar to netstat)" },
+        { "command": "vol -f dump.raw windows.hashdump", "description": "Extract password hashes from SAM (requires SYSTEM hive)" },
+        { "command": "vol -f dump.raw windows.lsadump", "description": "Extract LSA secrets (cached credentials, service passwords)" }
+      ]
+    },
+    {
+      "title": "Volatility 3 — Malware Detection",
+      "commands": [
+        { "command": "vol -f dump.raw windows.malfind", "description": "Find injected code in process memory (RWX pages)" },
+        { "command": "vol -f dump.raw windows.ssdt", "description": "Check System Service Descriptor Table for hooks" },
+        { "command": "vol -f dump.raw windows.modules", "description": "List loaded kernel modules" },
+        { "command": "vol -f dump.raw windows.callbacks", "description": "List kernel callbacks (rootkit detection)" }
+      ]
+    },
+    {
+      "title": "Volatility 2 — Legacy Commands",
+      "commands": [
+        { "command": "vol.py -f dump.raw imageinfo", "description": "Identify OS profile (critical first step in Vol2)" },
+        { "command": "vol.py -f dump.raw --profile=Win7SP1x64 pslist", "description": "List processes with profile specified" },
+        { "command": "vol.py -f dump.raw --profile=Win7SP1x64 cmdscan", "description": "Extract commands from cmd.exe (conhost/csrss)" },
+        { "command": "vol.py -f dump.raw --profile=Win7SP1x64 consoles", "description": "Extract full console input/output history" },
+        { "command": "vol.py -f dump.raw --profile=Win7SP1x64 clipboard", "description": "Extract clipboard contents" },
+        { "command": "vol.py -f dump.raw --profile=Win7SP1x64 printkey -K 'path'", "description": "Read specific registry key from memory" },
+        { "command": "vol.py -f dump.raw --profile=Win7SP1x64 truecryptpassphrase", "description": "Extract TrueCrypt/VeraCrypt passphrase from memory" }
+      ]
+    },
+    {
+      "title": "Quick Triage One-Liners",
+      "commands": [
+        { "command": "strings -a dump.raw | grep -i 'password\\|secret\\|flag' | head -50", "description": "Quick string search for sensitive data" },
+        { "command": "strings -a dump.raw | grep -E 'https?://' | sort -u", "description": "Extract all URLs from memory dump" },
+        { "command": "file dump.raw", "description": "Identify memory dump format (raw, ELF core, hibernation)" },
+        { "command": "xxd dump.raw | head -20", "description": "Hex dump first bytes to check file header/signature" }
+      ]
+    }
+  ]
+}

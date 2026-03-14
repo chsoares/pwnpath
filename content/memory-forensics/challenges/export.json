@@ -1,0 +1,80 @@
+{
+  "challengeId": "export",
+  "name": "Export",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/Export",
+  "difficulty": "very_easy",
+  "estimatedTime": "1 hour",
+  "keyTakeaway": "Volatility fundamentals — profiling a Windows memory dump, listing processes, and extracting command history from console buffers",
+  "tags": ["Volatility", "pslist", "cmdscan", "consoles", "Windows memory", "imageinfo"],
+  "fundamentals": {
+    "content": "## Introduction to Memory Forensics with Volatility\n\n### Why Memory Analysis Matters\n\nMemory forensics captures the runtime state of a system — running processes, open network connections, loaded DLLs, clipboard contents, and command history that disappear when the machine is powered off. Disk forensics alone cannot reveal what was actively happening at the time of an incident.\n\n### Volatility Framework Basics\n\nVolatility is the de facto standard for memory forensics. The workflow follows a consistent pattern:\n\n1. **Profile the image** — Determine the OS version and architecture so Volatility can parse kernel structures correctly.\n2. **List processes** — Enumerate all running processes to identify suspicious or unexpected entries.\n3. **Extract artifacts** — Dump command history, network connections, registry keys, or files from memory.\n\n### Key Volatility 2 Plugins for Beginners\n\n| Plugin | Purpose |\n|--------|--------|\n| `imageinfo` | Identify OS profile (Windows version, architecture) |\n| `pslist` | List running processes from the EPROCESS doubly-linked list |\n| `psscan` | Scan for process structures (finds hidden/terminated processes) |\n| `cmdscan` | Extract commands typed into cmd.exe via COMMAND_HISTORY structures |\n| `consoles` | Full console input/output buffer (more complete than cmdscan) |\n\n### Windows 7 SP1 x64 Memory Layout\n\nWindows 7 uses specific kernel structures that Volatility must match. The `imageinfo` plugin suggests one or more profiles — always verify by checking if process listings look reasonable with the suggested profile.",
+    "toolReferences": [
+      {
+        "tool": "Volatility 2",
+        "commands": [
+          "vol.py -f memory.raw imageinfo",
+          "vol.py -f memory.raw --profile=Win7SP1x64 pslist",
+          "vol.py -f memory.raw --profile=Win7SP1x64 cmdscan",
+          "vol.py -f memory.raw --profile=Win7SP1x64 consoles"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start with imageinfo to determine the correct Volatility profile for this Windows 7 SP1 x64 dump.",
+      "Use pslist to enumerate running processes — look for anything unusual or out of place among standard Windows services.",
+      "The cmdscan plugin extracts commands from COMMAND_HISTORY structures in csrss.exe memory. Check what commands were typed.",
+      "The consoles plugin provides more context than cmdscan — it includes both input and output from console sessions.",
+      "Pay attention to process parent-child relationships. A suspicious child process under an unexpected parent is a red flag.",
+      "Look at the timestamps of processes — when were suspicious processes started relative to system boot?",
+      "If you find encoded or obfuscated data in command output, try Base64 decoding or other common encoding schemes."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** You are given a Windows 7 SP1 x64 memory dump and must analyze it using Volatility to uncover what happened on the system.\n\n**Key Artifacts:**\n- Raw memory dump (.raw format)\n- Windows 7 SP1 x64 kernel structures",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify the memory profile",
+        "command": "vol.py -f memory.raw imageinfo",
+        "explanation": "The imageinfo plugin analyzes the memory dump header and kernel structures to determine the operating system. For this dump, it identifies Win7SP1x64 as the suggested profile. Always run this first — using the wrong profile will produce garbage output."
+      },
+      {
+        "stepNumber": 2,
+        "description": "List all running processes",
+        "command": "vol.py -f memory.raw --profile=Win7SP1x64 pslist",
+        "explanation": "pslist walks the EPROCESS doubly-linked list maintained by the Windows kernel. It shows PID, PPID, process name, start time, and thread count. Review the list for processes that seem out of place or were started at unusual times."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Extract command-line history",
+        "command": "vol.py -f memory.raw --profile=Win7SP1x64 cmdscan",
+        "explanation": "cmdscan searches for COMMAND_HISTORY structures in the memory of csrss.exe and conhost.exe. This reveals exactly what commands the user or attacker typed into cmd.exe sessions, providing direct evidence of activity."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Get full console input/output",
+        "command": "vol.py -f memory.raw --profile=Win7SP1x64 consoles",
+        "explanation": "The consoles plugin is more comprehensive than cmdscan — it captures both the commands typed AND their output from the console screen buffer. This provides full context of what the user saw and did in each terminal session."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Investigate suspicious processes",
+        "command": "vol.py -f memory.raw --profile=Win7SP1x64 cmdline",
+        "explanation": "The cmdline plugin shows the full command line used to launch each process, including arguments. This helps identify processes launched with suspicious parameters or from unusual locations."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Extract relevant data from findings",
+        "command": "echo '<encoded_data>' | base64 -d",
+        "explanation": "If encoded data is found in command history or process arguments, decode it to reveal the actual content. Base64 is the most common encoding used to obfuscate commands and data in memory."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": null,
+    "nextChallengeId": "truesecrets"
+  }
+}

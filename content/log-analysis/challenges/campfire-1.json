@@ -1,0 +1,92 @@
+{
+  "challengeId": "campfire-1",
+  "name": "Campfire-1",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Campfire-1",
+  "difficulty": "very_easy",
+  "estimatedTime": "1-2 hours",
+  "keyTakeaway": "Kerberoasting detection — identifying suspicious Kerberos TGS requests (Event ID 4769) with RC4 encryption in Domain Controller security logs",
+  "tags": ["Kerberoasting", "Event ID 4769", "RC4", "Rubeus", "PowerView", "PECmd", "Prefetch", "Active Directory", "Kerberos"],
+  "fundamentals": {
+    "content": "## Kerberoasting Detection via Event Logs\n\n### What Is Kerberoasting?\n\nKerberoasting is an Active Directory attack where an authenticated domain user requests Kerberos Ticket Granting Service (TGS) tickets for service accounts, then cracks them offline to recover plaintext passwords. It's devastating because:\n\n1. **Any domain user** can request TGS tickets for any service\n2. The attacker deliberately requests **RC4 encryption** (weaker) instead of AES\n3. Cracking happens **offline** — no failed login alerts\n4. Service accounts often have **weak, rarely-rotated passwords**\n\n### The Attack Chain\n\n1. **Enumerate** service accounts with SPNs using PowerView (`Get-DomainUser -SPN`)\n2. **Request** TGS tickets with RC4 encryption using Rubeus (`kerberoast`)\n3. **Crack** the ticket offline with hashcat or john\n\n### Detection: Event ID 4769\n\nThe Domain Controller logs every TGS request as **Event ID 4769** (Kerberos Service Ticket Operation). The key detection indicator is the **Ticket Encryption Type**:\n\n| Encryption Type | Value | Meaning |\n|----------------|-------|--------|\n| AES256-CTS | `0x12` | Normal, modern Kerberos |\n| RC4-HMAC | `0x17` | Suspicious — deliberately downgraded by attackers |\n\nWhen you see Event ID 4769 with encryption type `0x17` targeting a service account, that's a strong Kerberoasting indicator.\n\n### Prefetch Files\n\nWindows Prefetch files (`.pf`) record the last 8 execution times of any binary. Even if an attacker deletes their tools, the Prefetch file persists and proves execution with timestamps.",
+    "toolReferences": [
+      {
+        "tool": "EvtxECmd / jq",
+        "commands": [
+          "EvtxECmd.exe -f Security.evtx --json . --jsonf security.json",
+          "jq 'select(.EventId==4769)' security.json (Kerberos TGS requests)",
+          "jq 'select(.TicketEncryptionType==\"0x17\")' (filter for RC4 — Kerberoasting)"
+        ]
+      },
+      {
+        "tool": "PECmd (Prefetch parser)",
+        "commands": [
+          "PECmd.exe -d prefetch/ --json . (parse all Prefetch files to JSON)",
+          "PECmd.exe -f RUBEUS.EXE-XXXXX.pf (parse specific Prefetch file)"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start with the DC Security Event Log — filter for Event ID 4769 (Kerberos Service Ticket Operation).",
+      "Not all 4769 events are Kerberoasting. The key indicator is the Ticket Encryption Type: 0x17 (RC4) is suspicious, 0x12 (AES256) is normal.",
+      "The targeted service name is in the ServiceName field of the 4769 event. It's a database service account.",
+      "The workstation IP is in the IpAddress field of the same 4769 event.",
+      "For the enumeration tool, check PowerShell Operational logs or Prefetch files for known AD enumeration scripts.",
+      "Use PECmd to parse Prefetch files — they record execution times even after the tool is deleted.",
+      "The Kerberoasting tool path is visible in the Prefetch file's referenced files list."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** Detection of a Kerberoasting attack against Active Directory. Artifacts include DC Security logs, PowerShell logs, and Prefetch files from a workstation.\n\n**Attack Chain:** PowerView enumeration -> Rubeus Kerberoasting -> TGS ticket extraction",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Find the Kerberoasting event timestamp",
+        "command": "jq 'select(.EventId==4769) | select(.TicketEncryptionType==\"0x17\")' security.json",
+        "explanation": "Filter Event ID 4769 for RC4 encryption type (0x17). Normal Kerberos uses AES (0x12), so RC4 requests are anomalous and indicate Kerberoasting. The event occurred at `2024-05-21 03:18:09`. **Answer: `2024-05-21 03:18:09`**"
+      },
+      {
+        "stepNumber": 2,
+        "description": "Identify the targeted service",
+        "command": "Check the ServiceName field in the 4769 event",
+        "explanation": "The TGS ticket was requested for `MSSQLService` — a SQL Server service account. Service accounts are prime Kerberoasting targets because they often have SPNs registered and weak passwords. **Answer: `MSSQLService`**"
+      },
+      {
+        "stepNumber": 3,
+        "description": "Find the attacker workstation IP",
+        "command": "Check the IpAddress field in the 4769 event",
+        "explanation": "The Kerberos TGS request originated from `172.17.79.129`. This is the workstation where the attacker ran Rubeus. **Answer: `172.17.79.129`**"
+      },
+      {
+        "stepNumber": 4,
+        "description": "Identify the enumeration script",
+        "command": "Check PowerShell Script Block Logging (Event ID 4104) or Prefetch files",
+        "explanation": "PowerShell Script Block Logging reveals that `powerview.ps1` was executed — this is the PowerView module used to enumerate domain users with SPNs (`Get-DomainUser -SPN`). **Answer: `powerview.ps1`**"
+      },
+      {
+        "stepNumber": 5,
+        "description": "Find when the enumeration script ran",
+        "command": "PECmd.exe -d prefetch/ --json . | jq 'select(.ExecutableName | contains(\"POWERSHELL\"))'",
+        "explanation": "Prefetch files for PowerShell show it was executed at `2024-05-21 03:16:32`, and the referenced files include `powerview.ps1`. This is 2 minutes before the Kerberoasting event — the attacker enumerated first, then attacked. **Answer: `2024-05-21 03:16:32`**"
+      },
+      {
+        "stepNumber": 6,
+        "description": "Find the Kerberoasting tool path",
+        "command": "PECmd.exe -f RUBEUS.EXE-XXXXX.pf",
+        "explanation": "The Prefetch file for Rubeus reveals its full path: `C:\\Users\\Alonzo.spire\\Downloads\\Rubeus.exe`. Rubeus is the most common Kerberoasting tool in real-world attacks. **Answer: `C:\\Users\\Alonzo.spire\\Downloads\\Rubeus.exe`**"
+      },
+      {
+        "stepNumber": 7,
+        "description": "Find when Rubeus was executed",
+        "command": "Check the Prefetch file last execution timestamp",
+        "explanation": "The Prefetch file shows Rubeus was executed at `2024-05-21 03:18:08` — one second before the DC logged the TGS request. This millisecond-level correlation between the workstation artifact (Prefetch) and the DC log (Event ID 4769) conclusively links the tool to the attack. **Answer: `2024-05-21 03:18:08`**"
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "unit42",
+    "nextChallengeId": "logjammer"
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "categoryId": "log-analysis",
+  "title": "Log Analysis & SIEM Cheatsheet",
+  "sections": [
+    {
+      "title": "Windows Event Log Key Event IDs",
+      "commands": [
+        { "command": "4624", "description": "Successful logon (check Logon Type: 2=Interactive, 3=Network, 10=RemoteInteractive)" },
+        { "command": "4625", "description": "Failed logon attempt (brute-force indicator when high volume)" },
+        { "command": "4648", "description": "Logon using explicit credentials (runas, lateral movement)" },
+        { "command": "4672", "description": "Special privileges assigned to new logon (admin logon detection)" },
+        { "command": "4688", "description": "New process created (requires command-line auditing enabled)" },
+        { "command": "4697", "description": "Service installed on the system (PsExec, persistence)" },
+        { "command": "4768", "description": "Kerberos TGT requested (AS-REP Roasting: look for 0x17 encryption)" },
+        { "command": "4769", "description": "Kerberos TGS requested (Kerberoasting: look for 0x17 encryption)" },
+        { "command": "4771", "description": "Kerberos pre-authentication failed" },
+        { "command": "5140", "description": "Network share accessed" },
+        { "command": "7045", "description": "New service installed (System log — persistence, PsExec)" },
+        { "command": "1102", "description": "Audit log cleared (anti-forensics indicator)" }
+      ]
+    },
+    {
+      "title": "Sysmon Key Event IDs",
+      "commands": [
+        { "command": "Event ID 1", "description": "Process creation (command line, parent process, hashes)" },
+        { "command": "Event ID 3", "description": "Network connection (source/dest IP, port, process)" },
+        { "command": "Event ID 7", "description": "Image loaded (DLL loading, injection detection)" },
+        { "command": "Event ID 8", "description": "CreateRemoteThread (process injection indicator)" },
+        { "command": "Event ID 11", "description": "File created (malware drops, tool staging)" },
+        { "command": "Event ID 12/13/14", "description": "Registry events (create/delete, value set, rename)" },
+        { "command": "Event ID 22", "description": "DNS query (C2 domain resolution)" },
+        { "command": "Event ID 25", "description": "Process tampering (process hollowing detection)" }
+      ]
+    },
+    {
+      "title": "EvtxECmd & Timeline Explorer",
+      "commands": [
+        { "command": "EvtxECmd.exe -f Security.evtx --csv . --csvf security.csv", "description": "Parse single EVTX file to CSV" },
+        { "command": "EvtxECmd.exe -d ./logs/ --csv . --csvf all_logs.csv", "description": "Parse entire directory of EVTX files" },
+        { "command": "EvtxECmd.exe -f Security.evtx --inc 4624,4625 --csv .", "description": "Parse only specific Event IDs" },
+        { "command": "EvtxECmd.exe -f Sysmon.evtx --json . --jsonf sysmon.json", "description": "Export to JSON format" }
+      ]
+    },
+    {
+      "title": "Chainsaw",
+      "commands": [
+        { "command": "chainsaw hunt ./logs/ -s sigma/ --mapping mappings/sigma-event-logs-all.yml", "description": "Hunt with Sigma rules across event logs" },
+        { "command": "chainsaw hunt ./logs/ --kind evtx", "description": "Hunt with built-in detection rules" },
+        { "command": "chainsaw search ./logs/ -t 'Event.System.EventID: =4688'", "description": "Search for specific Event ID" },
+        { "command": "chainsaw search ./logs/ -e 'mimikatz'", "description": "Search for string across all logs" }
+      ]
+    },
+    {
+      "title": "Linux Log Analysis",
+      "commands": [
+        { "command": "grep 'Failed password' /var/log/auth.log | wc -l", "description": "Count failed SSH login attempts" },
+        { "command": "grep 'Accepted password' /var/log/auth.log", "description": "Find successful SSH logins" },
+        { "command": "grep 'session opened' /var/log/auth.log", "description": "Track user session activity" },
+        { "command": "utmpdump /var/log/wtmp", "description": "Parse wtmp binary log for login records" },
+        { "command": "last -f /var/log/wtmp", "description": "Show login history from wtmp" },
+        { "command": "lastb -f /var/log/btmp", "description": "Show failed login history from btmp" }
+      ]
+    },
+    {
+      "title": "jq for JSON Log Parsing",
+      "commands": [
+        { "command": "cat alerts.json | jq '.[] | .alert.signature' | sort | uniq -c | sort -rn", "description": "Top Suricata alert signatures" },
+        { "command": "cat cloudtrail.json | jq '.Records[] | select(.eventName==\"CreateUser\")'", "description": "Filter CloudTrail for specific API calls" },
+        { "command": "cat logs.json | jq -r '.[] | [.timestamp, .source_ip, .event] | @csv'", "description": "Extract fields to CSV format" },
+        { "command": "cat logs.json | jq 'group_by(.source_ip) | map({ip: .[0].source_ip, count: length}) | sort_by(.count) | reverse'", "description": "Group and count events by source IP" }
+      ]
+    }
+  ]
+}

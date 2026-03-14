@@ -1,0 +1,103 @@
+{
+  "challengeId": "recollection",
+  "name": "Recollection",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Recollection",
+  "difficulty": "easy",
+  "estimatedTime": "2-3 hours",
+  "keyTakeaway": "Comprehensive Windows memory investigation — extracting clipboard data, command history, network connections, registry keys, browser history, and deobfuscating PowerShell from a single memory dump",
+  "tags": ["Volatility", "clipboard", "registry", "browser history", "PowerShell deobfuscation", "network connections", "cmdscan", "netscan", "printkey"],
+  "fundamentals": {
+    "content": "## Comprehensive Windows Memory Analysis\n\n### Beyond Basic Process Listing\n\nReal-world investigations require pulling multiple artifact types from a single memory dump. Each plugin reveals a different facet of the attacker's activity:\n\n| Artifact | Plugin | What It Reveals |\n|----------|--------|-----------------|\n| Clipboard | `clipboard` | Data the user or attacker copied — passwords, commands, URLs |\n| Command history | `cmdscan` / `consoles` | Commands typed in cmd.exe |\n| Network connections | `netscan` | Active and recently closed TCP/UDP connections |\n| Registry keys | `printkey` | Specific registry values (Run keys, services, user settings) |\n| Browser history | `filescan` + `dumpfiles` | SQLite databases containing browsing history |\n| Process tree | `pstree` | Parent-child relationships revealing execution chains |\n\n### PowerShell Deobfuscation\n\nAttackers commonly obfuscate PowerShell commands using techniques like:\n- **Base64 encoding** (`-EncodedCommand` parameter)\n- **String concatenation** (`'Down' + 'load' + 'String'`)\n- **Character replacement** (`-replace 'x','y'`)\n- **Invoke-Expression with variables** (`$a = 'malicious'; IEX $a`)\n\nCyberChef can chain decode operations: From Base64 → URL Decode → String Reverse → etc.\n\n### Browser History from Memory\n\nBrowser history databases (Chrome: `History`, Firefox: `places.sqlite`) are SQLite files that are often cached in memory. The workflow:\n1. `filescan | grep -i history` — Find the database file\n2. `dumpfiles -Q <offset>` — Extract it\n3. `sqlite3 History 'SELECT url, title FROM urls'` — Query it",
+    "toolReferences": [
+      {
+        "tool": "Volatility 2",
+        "commands": [
+          "vol.py -f memory.raw --profile=Win7SP1x64 clipboard",
+          "vol.py -f memory.raw --profile=Win7SP1x64 cmdscan",
+          "vol.py -f memory.raw --profile=Win7SP1x64 netscan",
+          "vol.py -f memory.raw --profile=Win7SP1x64 printkey -K 'Software\\Microsoft\\Windows\\CurrentVersion\\Run'",
+          "vol.py -f memory.raw --profile=Win7SP1x64 filescan | grep -i history",
+          "vol.py -f memory.raw --profile=Win7SP1x64 dumpfiles -Q <offset> -D ./dump/",
+          "vol.py -f memory.raw --profile=Win7SP1x64 pstree"
+        ]
+      },
+      {
+        "tool": "CyberChef / sqlite3",
+        "commands": [
+          "CyberChef: From Base64 → decode obfuscated PowerShell",
+          "sqlite3 History 'SELECT url, title, visit_count FROM urls ORDER BY last_visit_time DESC'"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "This Sherlock has 15 questions covering many artifact types — plan to use at least 8-10 different Volatility plugins.",
+      "Start with clipboard — attackers often copy/paste commands or credentials, and users may have copied sensitive data.",
+      "Use cmdscan and consoles to extract command-line activity. Look for PowerShell invocations with encoded parameters.",
+      "netscan shows network connections. Look for connections to unusual external IPs or known malicious ports.",
+      "Use printkey to examine specific registry hives — Run keys reveal persistence mechanisms.",
+      "Browser history can be extracted by dumping the SQLite database from memory. Look for suspicious downloads or C2 panel visits.",
+      "For PowerShell deobfuscation, use CyberChef to chain decode operations. Try Base64 decode first, then look for additional layers.",
+      "The pstree output reveals the execution chain — follow parent-child relationships from the initial access vector."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A Windows 7 SP1 x64 system was compromised. You are given a memory dump and must answer 15 questions covering the full scope of the investigation — from initial access to persistence and data exfiltration.\n\n**Key Artifacts:**\n- Windows 7 SP1 x64 memory dump\n- Multiple artifact types to extract and correlate",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Profile the image and list processes",
+        "command": "vol.py -f recollection.raw imageinfo && vol.py -f recollection.raw --profile=Win7SP1x64 pstree",
+        "explanation": "Confirm the Win7SP1x64 profile and get an overview of all running processes with their parent-child relationships. This gives you the big picture of what was running on the system."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Extract clipboard contents",
+        "command": "vol.py -f recollection.raw --profile=Win7SP1x64 clipboard",
+        "explanation": "The clipboard plugin dumps whatever was last copied to the Windows clipboard. This can reveal passwords, commands, or other data the user or attacker had copied."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Extract command history",
+        "command": "vol.py -f recollection.raw --profile=Win7SP1x64 cmdscan",
+        "explanation": "cmdscan retrieves commands typed in cmd.exe sessions. Look for reconnaissance commands (whoami, ipconfig, net user) and any PowerShell invocations with encoded payloads."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Analyze network connections",
+        "command": "vol.py -f recollection.raw --profile=Win7SP1x64 netscan",
+        "explanation": "netscan reveals active and recently closed network connections with PIDs. Cross-reference suspicious external connections with the process list to identify C2 communication or data exfiltration."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Check registry persistence keys",
+        "command": "vol.py -f recollection.raw --profile=Win7SP1x64 printkey -K 'Software\\Microsoft\\Windows\\CurrentVersion\\Run'",
+        "explanation": "Examine the Run registry key for persistence mechanisms. Malware commonly adds entries here to survive reboots. Check both HKLM and HKCU hives."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Extract and query browser history",
+        "command": "vol.py -f recollection.raw --profile=Win7SP1x64 filescan | grep -i history",
+        "explanation": "Locate browser history databases cached in memory. Dump the SQLite file and query it to see what websites were visited — look for C2 panels, paste sites, or tool downloads."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Dump browser history and query it",
+        "command": "vol.py -f recollection.raw --profile=Win7SP1x64 dumpfiles -Q <offset> -D ./dump/ && sqlite3 ./dump/History 'SELECT url, title FROM urls'",
+        "explanation": "Extract the browser history database from memory and query it with sqlite3. The browsing history reveals sites visited by the attacker, including potential tool downloads and C2 infrastructure."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Deobfuscate PowerShell commands",
+        "command": "CyberChef: From Base64 → decode payload found in cmdscan output",
+        "explanation": "Take any Base64-encoded PowerShell commands found in earlier steps and decode them using CyberChef. The decoded content reveals the actual malicious operations: download cradles, reverse shells, or data exfiltration commands."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "reminiscent",
+    "nextChallengeId": "rogueone"
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "challengeId": "bumblebee",
+  "name": "Bumblebee",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Bumblebee",
+  "difficulty": "easy",
+  "estimatedTime": "2-3 hours",
+  "keyTakeaway": "Web application log forensics — correlating NGINX access logs with SQLite database records to trace credential theft and unauthorized access",
+  "tags": ["NGINX", "access.log", "SQLite", "web forensics", "credential theft", "timestamp analysis", "phpBB", "User-Agent"],
+  "fundamentals": {
+    "content": "## NGINX Access Log and SQLite Database Forensics\n\n### Why Web Server Logs Are Critical\n\nNGINX access logs record every HTTP request to the server, including the client IP, timestamp, requested URL, HTTP method, response code, and User-Agent. When combined with application database records, they reveal the complete narrative of who did what, from where, and when.\n\n### NGINX Access Log Format\n\nThe default NGINX `combined` log format:\n```\n$remote_addr - $remote_user [$time_local] \"$request\" $status $body_bytes_sent \"$http_referer\" \"$http_user_agent\"\n```\n\n**Example:**\n```\n10.10.0.5 - - [25/Mar/2024:10:15:30 +0000] \"POST /ucp.php?mode=login HTTP/1.1\" 302 0 \"http://forum.example.com/\" \"Mozilla/5.0...\"\n```\n\n### SQLite Database Analysis\n\nWeb applications like phpBB store user data, session records, and activity logs in databases. SQLite databases can be queried directly with the `sqlite3` command-line tool:\n\n| Table | What It Contains |\n|-------|------------------|\n| users | Usernames, email, registration dates, last login timestamps |\n| sessions | Active sessions with IP addresses and User-Agent strings |\n| logs | Administrative actions and configuration changes |\n| posts | Forum content with author and timestamp |\n\n### Epoch Timestamp Conversion\n\nSQLite databases often store timestamps as Unix epochs (seconds since 1970-01-01). Converting these to human-readable format is essential for timeline construction:\n```sql\nSELECT datetime(timestamp, 'unixepoch') FROM table_name;\n```\n\n### Correlating Logs with Database Records\n\nThe power of multi-artifact analysis is correlation. Match:\n- NGINX log IP addresses with database session IPs\n- NGINX timestamps with database login timestamps\n- User-Agent strings across both sources for session tracking",
+    "toolReferences": [
+      {
+        "tool": "sqlite3",
+        "commands": [
+          "sqlite3 database.db '.tables' (list all tables)",
+          "sqlite3 database.db '.schema users' (show table structure)",
+          "sqlite3 database.db \"SELECT * FROM users;\"",
+          "sqlite3 database.db \"SELECT datetime(user_regdate, 'unixepoch') FROM users;\""
+        ]
+      },
+      {
+        "tool": "NGINX log parsing",
+        "commands": [
+          "grep 'POST.*login' access.log (find login attempts)",
+          "awk '{print $1}' access.log | sort | uniq -c | sort -rn (top IPs)",
+          "grep '10.10.0.5' access.log (filter by specific IP)"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start by exploring the SQLite database — list all tables and understand the schema before querying.",
+      "User registration and login timestamps in the database are stored as Unix epoch values. Convert them with datetime().",
+      "The NGINX access.log shows all HTTP requests — filter for POST requests to login endpoints to find authentication events.",
+      "Cross-reference the IP addresses in the access.log with the IPs stored in the database session records.",
+      "The User-Agent string is a fingerprint — if you see the same unusual User-Agent in both the access.log and the database, it links the same actor.",
+      "Look for the sequence: attacker connects to the Guest WiFi, browses the forum, finds credentials, then uses them.",
+      "Pay attention to which user accounts were accessed from external/guest network IPs versus internal corporate IPs.",
+      "The timeline of events matters — registration time, first login, and credential access should form a logical sequence."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** An external contractor connected to the corporate Guest WiFi and accessed an internal forum. They discovered and stole admin credentials from the forum. You're given the NGINX access.log and the phpBB SQLite database.\n\n**Key Artifacts:**\n- NGINX `access.log` — HTTP request log\n- phpBB SQLite database — Forum user and session data\n\n**Investigation Goal:** Trace the contractor's actions from initial access to credential theft.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Explore the SQLite database structure",
+        "command": "sqlite3 phpbb.db '.tables'",
+        "explanation": "List all tables in the database to understand what data is available. Key tables include users (account information), sessions (active login sessions), and logs (administrative actions)."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Enumerate user accounts and registration dates",
+        "command": "sqlite3 phpbb.db \"SELECT user_id, username, user_email, datetime(user_regdate, 'unixepoch') as reg_date FROM phpbb_users;\"",
+        "explanation": "Query user accounts with human-readable registration dates. The epoch-to-datetime conversion reveals when each account was created. Look for recently created accounts that coincide with the incident timeline."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Identify the attacker's IP from access logs",
+        "command": "awk '{print $1}' access.log | sort | uniq -c | sort -rn",
+        "explanation": "Count requests per IP to identify the most active clients. The attacker's IP from the Guest WiFi subnet will stand out — it appears with login requests and browsing activity during the incident window."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Trace login attempts from the attacker IP",
+        "command": "grep 'POST.*login' access.log | grep '<attacker_ip>'",
+        "explanation": "Filter the access log for POST requests to the login endpoint from the identified attacker IP. A 302 redirect response typically indicates a successful login. Multiple POST requests may indicate credential testing."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Correlate database sessions with the attacker IP",
+        "command": "sqlite3 phpbb.db \"SELECT * FROM phpbb_sessions WHERE session_ip='<attacker_ip>';\"",
+        "explanation": "Query the sessions table for the attacker's IP. This confirms which user account the attacker authenticated as and reveals the session User-Agent for further correlation."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Find the credential exposure",
+        "command": "sqlite3 phpbb.db \"SELECT post_id, poster_id, post_subject, datetime(post_time, 'unixepoch') FROM phpbb_posts;\"",
+        "explanation": "Search forum posts for credential exposure. The admin credentials were posted in a forum thread — a common operational security failure. The post content reveals the username and password that were subsequently stolen."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Build the complete attack timeline",
+        "command": "Correlate access.log timestamps with database records chronologically",
+        "explanation": "Reconstruct the full sequence: the contractor connects to Guest WiFi, discovers the internal forum, browses posts, finds exposed credentials, and logs in with the stolen admin credentials. Each step is corroborated by both the NGINX log and the database records."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "crownjewel-1",
+    "nextChallengeId": "ticktock"
+  }
+}

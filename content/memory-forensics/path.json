@@ -1,0 +1,101 @@
+{
+  "categoryId": "memory-forensics",
+  "challenges": [
+    {
+      "position": 1,
+      "challengeId": "export",
+      "name": "Export",
+      "difficulty": "very_easy",
+      "estimatedTime": "1 hour",
+      "keyTakeaway": "Volatility fundamentals — process listing, command history recovery, and basic memory dump triage on Windows"
+    },
+    {
+      "position": 2,
+      "challengeId": "truesecrets",
+      "name": "TrueSecrets",
+      "difficulty": "easy",
+      "estimatedTime": "1-2 hours",
+      "keyTakeaway": "File extraction from memory — recovering TrueCrypt containers and passphrases using Volatility's specialized plugins"
+    },
+    {
+      "position": 3,
+      "challengeId": "reminiscent",
+      "name": "Reminiscent",
+      "difficulty": "easy",
+      "estimatedTime": "2-3 hours",
+      "keyTakeaway": "Phishing attack reconstruction — tracing malicious email attachments through process trees and decoding multi-layer Base64 payloads"
+    },
+    {
+      "position": 4,
+      "challengeId": "recollection",
+      "name": "Recollection",
+      "difficulty": "easy",
+      "estimatedTime": "3-4 hours",
+      "keyTakeaway": "Comprehensive Windows memory forensics — clipboard analysis, browser history recovery, network connections, and full attack chain reconstruction"
+    },
+    {
+      "position": 5,
+      "challengeId": "rogueone",
+      "name": "RogueOne",
+      "difficulty": "medium",
+      "estimatedTime": "2-3 hours",
+      "keyTakeaway": "C2 detection and process spoofing — identifying malicious processes disguised as legitimate Windows services using malfind and netscan"
+    },
+    {
+      "position": 6,
+      "challengeId": "mellitus",
+      "name": "Mellitus",
+      "difficulty": "medium",
+      "estimatedTime": "3-4 hours",
+      "keyTakeaway": "Full incident response workflow — credential extraction via hashdump, FTP brute-force analysis, and hidden data recovery from process memory"
+    },
+    {
+      "position": 7,
+      "challengeId": "optinseltrace-3",
+      "name": "OpTinselTrace-3",
+      "difficulty": "medium",
+      "estimatedTime": "3-4 hours",
+      "keyTakeaway": "Multi-stage attack analysis — tracing malicious shortcuts through VBScript/PowerShell deobfuscation to shellcode and C2 indicators"
+    },
+    {
+      "position": 8,
+      "challengeId": "aptnightmare",
+      "name": "APTNightmare",
+      "difficulty": "medium",
+      "estimatedTime": "4-5 hours",
+      "keyTakeaway": "Linux memory forensics — building custom Volatility profiles, analyzing bash history, and correlating with PCAP and disk artifacts"
+    },
+    {
+      "position": 9,
+      "challengeId": "constellation",
+      "name": "Constellation",
+      "difficulty": "medium",
+      "estimatedTime": "2-3 hours",
+      "keyTakeaway": "Memory-extracted URL analysis — combining OSINT with memory artifacts to trace data exfiltration and malicious entity connections"
+    },
+    {
+      "position": 10,
+      "challengeId": "aptnightmare2",
+      "name": "APTNightmare2",
+      "difficulty": "hard",
+      "estimatedTime": "4-5 hours",
+      "keyTakeaway": "Linux rootkit detection — identifying kernel modules that unlist themselves, signal-based process hiding, and advanced evasion techniques"
+    },
+    {
+      "position": 11,
+      "challengeId": "lockpick3",
+      "name": "Lockpick3.0",
+      "difficulty": "hard",
+      "estimatedTime": "4-5 hours",
+      "keyTakeaway": "Linux Volatility 3 with custom symbols — building symbol tables for Ubuntu, ransomware incident investigation, and timeline correlation"
+    },
+    {
+      "position": 12,
+      "challengeId": "reflection",
+      "name": "Reflection",
+      "difficulty": "hard",
+      "estimatedTime": "4-5 hours",
+      "keyTakeaway": "Reflective DLL injection detection — extracting injected DLLs from memory with modified Volatility plugins to bypass anti-forensics"
+    }
+  ]
+}

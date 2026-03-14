@@ -1,0 +1,114 @@
+{
+  "challengeId": "i-like-to",
+  "name": "i-like-to",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/i-like-to",
+  "difficulty": "medium",
+  "estimatedTime": "4-5 hours",
+  "keyTakeaway": "Multi-artifact CVE investigation — correlating MFT data, event logs, SQL dumps, and PowerShell history to reconstruct a MOVEit Transfer exploitation",
+  "tags": ["MOVEit", "CVE", "MFTECmd", "Chainsaw", "SQL", "webshell", "PowerShell", "IIS", "file transfer", "vulnerability exploitation"],
+  "fundamentals": {
+    "content": "## Multi-Artifact CVE Exploitation Investigation\n\n### MOVEit Transfer Vulnerability Context\n\nMOVEit Transfer is an enterprise managed file transfer (MFT) application. Critical vulnerabilities in MOVEit allowed attackers to exploit SQL injection flaws in the web-facing component to gain unauthorized access. The exploitation chain typically involves:\n\n1. **SQL injection** to bypass authentication\n2. **Webshell deployment** for persistent access\n3. **Data exfiltration** from the file transfer database\n\n### Key Forensic Artifacts\n\nInvestigating a MOVEit-style exploitation requires correlating multiple artifact types:\n\n| Artifact | Tool | What It Reveals |\n|----------|------|-----------------|\n| $MFT | MFTECmd | File creation timestamps for webshells, tools |\n| Event Logs | Chainsaw/EvtxECmd | Service events, authentication, process creation |\n| SQL Database | sqlite3/sqlcmd | Database queries, user accounts, file transfers |\n| PowerShell History | ConsoleHost_history.txt | Commands executed by the attacker |\n| IIS Logs | Text parsing | HTTP requests to the vulnerable endpoint |\n\n### MFT Analysis for Webshell Detection\n\nWebshells are typically written to the web application's directory. The MFT reveals:\n- **Created0x10** — When the file was created (may be timestomped)\n- **Created0x30** — The $FILE_NAME attribute timestamp (harder to forge)\n- If Created0x10 and Created0x30 differ significantly, timestomping is likely\n\n### PowerShell ConsoleHost History\n\nPowerShell saves command history to:\n```\n%APPDATA%\\Microsoft\\Windows\\PowerShell\\PSReadLine\\ConsoleHost_history.txt\n```\nThis file persists across sessions and records every command typed in PowerShell — including attacker commands if they used an interactive PowerShell session. It's often overlooked during cleanup.\n\n### SQL Database Forensics\n\nThe application database contains:\n- User accounts and authentication records\n- File transfer logs (who transferred what, when)\n- Configuration settings that may have been modified\n- Audit logs of administrative actions\n\nQuery the database to identify unauthorized accounts, unusual file transfers, or configuration changes made during the exploitation window.",
+    "toolReferences": [
+      {
+        "tool": "MFTECmd",
+        "commands": [
+          "MFTECmd.exe -f $MFT --csv . --csvf mft.csv",
+          "Filter for .aspx or .ashx files in the MOVEit web directory (webshell detection)",
+          "Compare Created0x10 vs Created0x30 timestamps (timestomping detection)"
+        ]
+      },
+      {
+        "tool": "Chainsaw",
+        "commands": [
+          "chainsaw hunt ./evtx/ -s sigma/ --mapping mappings/sigma-event-logs-all.yml",
+          "chainsaw search ./evtx/ -t 'Event.System.EventID: =4688'"
+        ]
+      },
+      {
+        "tool": "SQL analysis",
+        "commands": [
+          "sqlite3 moveit.db '.tables'",
+          "sqlite3 moveit.db 'SELECT * FROM users ORDER BY created_date DESC;'",
+          "sqlite3 moveit.db 'SELECT * FROM log ORDER BY timestamp DESC LIMIT 50;'"
+        ]
+      },
+      {
+        "tool": "PowerShell history",
+        "commands": [
+          "cat ConsoleHost_history.txt",
+          "Look for reconnaissance commands, file access, and data staging"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start with the $MFT — parse it with MFTECmd and look for recently created .aspx or .ashx files in the MOVEit web directory.",
+      "Webshells will have suspicious filenames and creation timestamps that fall within the exploitation window.",
+      "Check for timestomping: compare the $STANDARD_INFORMATION timestamps (Created0x10) with the $FILE_NAME timestamps (Created0x30). A large discrepancy indicates anti-forensics.",
+      "Use Chainsaw to hunt through the event logs with Sigma rules — it will flag process creation, service installation, and other suspicious events.",
+      "The SQL database dump contains user tables and file transfer records. Look for accounts created during the attack window.",
+      "PowerShell ConsoleHost_history.txt is a goldmine — it records every command the attacker typed in interactive PowerShell sessions.",
+      "IIS logs show the HTTP requests that exploited the vulnerability — look for unusual POST requests to specific MOVEit endpoints.",
+      "Correlate all timestamps across MFT, event logs, SQL records, and PowerShell history to build a unified attack timeline."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A MOVEit Transfer server was compromised through a critical CVE. The attacker exploited a SQL injection vulnerability, deployed webshells, and exfiltrated data. You're provided with the $MFT, event logs, SQL database dump, and PowerShell history from the server.\n\n**Key Artifacts:**\n- $MFT (Master File Table)\n- Windows Event Logs\n- SQL database dump\n- PowerShell ConsoleHost_history.txt\n- IIS logs\n\n**Attack Chain:** SQL injection -> Authentication bypass -> Webshell deployment -> Data exfiltration",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Parse the MFT and search for webshells",
+        "command": "MFTECmd.exe -f $MFT --csv . --csvf mft.csv",
+        "explanation": "Parse the full MFT to CSV format. Then filter for .aspx and .ashx files within the MOVEit web application directory. Webshells deployed by the attacker will appear as recently created files with suspicious names in the web-accessible directory."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Check for timestomping on webshell files",
+        "command": "Compare Created0x10 and Created0x30 columns for identified webshells",
+        "explanation": "The $STANDARD_INFORMATION timestamp (Created0x10) is easily modified by attackers to blend in with legitimate files. The $FILE_NAME timestamp (Created0x30) is much harder to forge. If these timestamps differ significantly, the attacker attempted timestomping to hide when the webshell was actually created."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Hunt through event logs with Chainsaw",
+        "command": "chainsaw hunt ./evtx/ -s sigma/ --mapping mappings/sigma-event-logs-all.yml",
+        "explanation": "Chainsaw applies Sigma detection rules against the event logs and flags suspicious activity. It will identify process creation events, service installations, and other indicators of compromise without requiring manual event ID filtering."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Analyze the SQL database for unauthorized access",
+        "command": "Review the SQL database dump for recently created users and unusual file transfers",
+        "explanation": "Query the user tables for accounts created during the attack window — the attacker may have created backdoor accounts through SQL injection. Check file transfer logs for unusual downloads that indicate data exfiltration."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Review PowerShell command history",
+        "command": "cat ConsoleHost_history.txt",
+        "explanation": "The PowerShell history file records every command from interactive sessions. Look for reconnaissance commands (whoami, ipconfig, net user), file operations (copy, move), and any data staging or exfiltration commands the attacker executed."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Analyze IIS logs for the exploitation requests",
+        "command": "grep 'POST' iis_logs.log | grep -i 'moveit\\|human\\|machine2'",
+        "explanation": "IIS logs record the HTTP requests that triggered the SQL injection. Look for unusual POST requests to specific MOVEit API endpoints — particularly those with abnormal parameters or from external IP addresses not associated with legitimate users."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Identify the exploitation endpoint and method",
+        "command": "Analyze the IIS log entries for the vulnerable endpoint",
+        "explanation": "The specific MOVEit endpoint that was exploited, the HTTP method used, and the response codes reveal the exploitation technique. A successful SQL injection typically shows POST requests with 200 OK responses to the vulnerable endpoint."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Reconstruct the complete attack timeline",
+        "command": "Merge timestamps from MFT, event logs, SQL, PowerShell history, and IIS logs",
+        "explanation": "Build the unified timeline: initial exploitation via SQL injection (IIS logs), webshell creation (MFT), interactive access via webshell, PowerShell commands for reconnaissance and staging, database queries for data identification, and file exfiltration. Each artifact source corroborates and enriches the others."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "nubilum-1",
+    "nextChallengeId": null
+  }
+}

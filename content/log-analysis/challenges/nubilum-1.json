@@ -1,0 +1,101 @@
+{
+  "challengeId": "nubilum-1",
+  "name": "Nubilum-1",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Nubilum-1",
+  "difficulty": "medium",
+  "estimatedTime": "3-4 hours",
+  "keyTakeaway": "Cloud log forensics — analyzing AWS CloudTrail logs with jq to trace credential compromise, resource creation, and C2 server deployment",
+  "tags": ["AWS", "CloudTrail", "jq", "cloud forensics", "PoshC2", "EC2", "CatScale", "IAM", "credential compromise"],
+  "fundamentals": {
+    "content": "## AWS CloudTrail Log Analysis\n\n### What Is CloudTrail?\n\nAWS CloudTrail records every API call made in an AWS account — who did what, from where, and when. It's the equivalent of Windows Security event logs for cloud infrastructure. Every CloudTrail event includes:\n\n- **eventTime** — When the API call was made\n- **eventName** — The API action (e.g., `RunInstances`, `CreateKeyPair`)\n- **userIdentity** — Who made the call (IAM user, role, access key)\n- **sourceIPAddress** — Where the call originated\n- **requestParameters** — What was requested\n- **responseElements** — What was returned\n\n### Key CloudTrail Events for Incident Response\n\n| Event Name | What It Means |\n|-----------|---------------|\n| `ConsoleLogin` | Someone logged into the AWS web console |\n| `CreateAccessKey` | New programmatic access key created |\n| `CreateKeyPair` | New EC2 SSH key pair created |\n| `CreateSecurityGroup` | New firewall rules created |\n| `AuthorizeSecurityGroupIngress` | Inbound firewall rule added |\n| `RunInstances` | New EC2 instance launched |\n| `PutBucketPolicy` | S3 bucket policy modified |\n| `CreateUser` | New IAM user created |\n\n### Using jq for CloudTrail Analysis\n\n`jq` is essential for CloudTrail forensics because CloudTrail logs are deeply nested JSON. Common patterns:\n\n```bash\n# List all unique event names\njq -r '.Records[].eventName' *.json | sort | uniq -c | sort -rn\n\n# Find all events from a specific IP\njq '.Records[] | select(.sourceIPAddress==\"1.2.3.4\")' *.json\n\n# Find all EC2 instance launches\njq '.Records[] | select(.eventName==\"RunInstances\")' *.json\n\n# Extract user identity for each event\njq '{time: .Records[].eventTime, user: .Records[].userIdentity.userName, action: .Records[].eventName}' *.json\n```\n\n### CatScale Linux Forensic Collection\n\nCatScale is a Linux incident response collection script that gathers:\n- Running processes, network connections, user accounts\n- Bash history, crontabs, SSH authorized_keys\n- File system timeline, loaded kernel modules\n- Container and cloud metadata\n\nIt produces a tarball of forensic artifacts that can be analyzed offline.",
+    "toolReferences": [
+      {
+        "tool": "jq",
+        "commands": [
+          "jq '.Records[] | select(.eventName==\"RunInstances\")' *.json",
+          "jq '.Records[] | select(.eventName==\"CreateKeyPair\")' *.json",
+          "jq -r '.Records[].eventName' *.json | sort | uniq -c | sort -rn",
+          "jq '.Records[] | select(.sourceIPAddress | startswith(\"1.2\"))' *.json"
+        ]
+      },
+      {
+        "tool": "CatScale analysis",
+        "commands": [
+          "tar xzf catscale_output.tar.gz",
+          "cat bash_history.txt (user command history)",
+          "cat netstat.txt (network connections at collection time)"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start by listing all unique eventNames in the CloudTrail logs to understand the scope of activity.",
+      "Use jq to filter for events from unusual or external IP addresses — the attacker's IP will differ from the organization's normal IPs.",
+      "Look for CreateKeyPair events — attackers create SSH key pairs to access EC2 instances they'll launch.",
+      "CreateSecurityGroup followed by AuthorizeSecurityGroupIngress reveals the attacker setting up firewall rules for their infrastructure.",
+      "RunInstances events show EC2 instances being launched — check the instance type, AMI, and key pair used.",
+      "The userIdentity field reveals which credentials were compromised — check the access key ID and username.",
+      "CatScale artifacts from a compromised instance may contain bash history showing C2 framework installation commands.",
+      "Correlate the EC2 instance IP addresses with any C2 traffic observed in the CatScale network artifacts."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** An AWS account was compromised. The attacker used stolen credentials to create EC2 instances for hosting a PoshC2 Command & Control server. You're provided with CloudTrail logs and CatScale collection from a compromised instance.\n\n**Key Artifacts:**\n- AWS CloudTrail JSON logs\n- CatScale Linux forensic collection\n\n**Attack Chain:** Credential compromise -> IAM enumeration -> Key pair creation -> Security group setup -> EC2 instance launch -> PoshC2 deployment",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Survey the CloudTrail activity",
+        "command": "jq -r '.Records[].eventName' *.json | sort | uniq -c | sort -rn",
+        "explanation": "List all API calls by frequency. This gives an overview of what happened in the account. Unusual events like CreateKeyPair, RunInstances, and CreateSecurityGroup stand out as infrastructure provisioning that may be attacker activity."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Identify the compromised credentials",
+        "command": "jq '.Records[] | {time: .eventTime, user: .userIdentity.userName, key: .userIdentity.accessKeyId, ip: .sourceIPAddress, action: .eventName}' *.json | head -50",
+        "explanation": "Extract the user identity details for each event. The compromised IAM user or access key will be associated with the malicious API calls. The sourceIPAddress for these events will differ from the organization's normal IP ranges."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Find the SSH key pair creation",
+        "command": "jq '.Records[] | select(.eventName==\"CreateKeyPair\")' *.json",
+        "explanation": "The attacker creates an SSH key pair to access EC2 instances they're about to launch. The key pair name and creation timestamp establish the beginning of the infrastructure provisioning phase."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Analyze security group configuration",
+        "command": "jq '.Records[] | select(.eventName==\"CreateSecurityGroup\" or .eventName==\"AuthorizeSecurityGroupIngress\")' *.json",
+        "explanation": "The attacker creates a security group and adds inbound rules. The ingress rules reveal which ports the attacker opened — commonly port 443 for HTTPS C2 traffic and port 22 for SSH management access."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Find the EC2 instance launches",
+        "command": "jq '.Records[] | select(.eventName==\"RunInstances\") | .requestParameters' *.json",
+        "explanation": "The RunInstances event contains the full specification of launched instances: AMI ID, instance type, key pair name, security group, and subnet. The responseElements contain the assigned instance IDs and private/public IP addresses."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Analyze CatScale artifacts from the C2 server",
+        "command": "cat bash_history.txt",
+        "explanation": "The CatScale collection from the compromised EC2 instance contains bash history showing the attacker installing and configuring PoshC2. Commands reveal the C2 framework installation, configuration of listeners, and any payload generation."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Correlate network artifacts with C2 activity",
+        "command": "cat netstat.txt | grep ESTABLISHED",
+        "explanation": "The CatScale network connections show active C2 sessions at the time of collection. Established connections to victim IPs confirm active command and control, while listening ports reveal the C2 server configuration."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Build the cloud attack timeline",
+        "command": "jq '.Records[] | select(.sourceIPAddress==\"<attacker_ip>\") | {time: .eventTime, action: .eventName}' *.json | sort",
+        "explanation": "Filter all CloudTrail events from the attacker's IP and sort chronologically. This reveals the complete attack sequence: initial access with compromised credentials, reconnaissance of the environment, infrastructure provisioning, and C2 deployment."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "tracer",
+    "nextChallengeId": "i-like-to"
+  }
+}

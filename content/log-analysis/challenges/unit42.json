@@ -1,0 +1,100 @@
+{
+  "challengeId": "unit42",
+  "name": "Unit42",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Unit42",
+  "difficulty": "very_easy",
+  "estimatedTime": "1-2 hours",
+  "keyTakeaway": "Sysmon log analysis — filtering process creation events, network connections, and registry modifications to trace malware execution on Windows",
+  "tags": ["Sysmon", "EvtxECmd", "Event ID 1", "Event ID 2", "Event ID 3", "timestomping", "UltraVNC", "Dropbox", "Windows forensics"],
+  "fundamentals": {
+    "content": "## Sysmon Log Analysis Fundamentals\n\n### Why Sysmon Matters\n\n**System Monitor (Sysmon)** is a Windows system service that logs detailed system activity to the Windows Event Log. Unlike default Windows logging, Sysmon captures process creation with full command lines, network connections mapped to processes, file creation timestamps, and registry modifications — the exact telemetry needed to reconstruct malware execution chains.\n\n### Critical Sysmon Event IDs\n\n| Event ID | Name | Forensic Value |\n|----------|------|----------------|\n| 1 | Process Creation | Full command line, parent process, hashes |\n| 2 | File Creation Time Changed | Detects timestomping (T1070.006) |\n| 3 | Network Connection | Source/dest IP:port mapped to process |\n| 5 | Process Terminated | When malware self-deletes after execution |\n| 11 | File Created | Dropped files, staging artifacts |\n| 22 | DNS Query | C2 domain resolution by process |\n\n### Timestomping Detection\n\nTimestomping (MITRE T1070.006) is a defense evasion technique where attackers modify file creation timestamps to make malicious files appear old and blend in with legitimate system files. Sysmon Event ID 2 specifically logs when a process changes a file's creation time, making this evasion detectable.\n\n### Analysis Workflow\n\n1. Parse EVTX with `EvtxECmd` to JSON/CSV\n2. Count events by ID to understand the activity profile\n3. Start with Event ID 1 (Process Creation) to identify suspicious executables\n4. Follow the process tree to trace the attack chain\n5. Correlate with network (ID 3), file (ID 11), and DNS (ID 22) events",
+    "toolReferences": [
+      {
+        "tool": "EvtxECmd",
+        "commands": [
+          "EvtxECmd.exe -f Sysmon.evtx --json . --jsonf sysmon.json",
+          "EvtxECmd.exe -f Sysmon.evtx --csv . --csvf sysmon.csv"
+        ]
+      },
+      {
+        "tool": "jq (for JSON output)",
+        "commands": [
+          "jq 'select(.EventId==1)' sysmon.json (Process Creation events)",
+          "jq 'select(.EventId==11)' sysmon.json | jq -s 'length' (count FileCreate events)",
+          "jq 'select(.EventId==2)' sysmon.json (FileCreationTimeChanged — timestomping)",
+          "jq 'select(.EventId==3)' sysmon.json (Network Connections)",
+          "jq 'select(.EventId==22)' sysmon.json (DNS Queries)"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start by counting Event ID 11 entries to answer the first question — use jq to filter and count.",
+      "For the malicious process, filter Event ID 1 (Process Creation) and look for executables launched from unusual locations like Downloads. Pay attention to the double file extension.",
+      "The cloud drive is revealed in the process creation event — look at the parent process or the file path for clues about how the file was delivered.",
+      "Timestomping is logged as Event ID 2 (FileCreationTimeChanged). Filter for events where the target filename ends in .pdf.",
+      "For the dropped file 'once.cmd', filter Event ID 11 (FileCreated) and search for that filename.",
+      "The dummy domain check is visible in Event ID 22 (DNS Query) or Event ID 3 (Network Connection).",
+      "Process termination is Event ID 5 — filter for the malicious process name."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** Analysis of Sysmon logs from a Windows system infected by a backdoored UltraVNC variant distributed via Dropbox, based on Palo Alto Unit42 research.\n\n**Artifact:** Single Sysmon EVTX file containing all logged activity.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Count Event ID 11 (FileCreate) entries",
+        "command": "jq 'select(.EventId==11)' sysmon.json | jq -s 'length'",
+        "explanation": "Filter for Event ID 11 and count the results. There are `56` FileCreate events, showing the malware created numerous files during execution. **Answer: `56`**"
+      },
+      {
+        "stepNumber": 2,
+        "description": "Identify the malicious process",
+        "command": "jq 'select(.EventId==1)' sysmon.json",
+        "explanation": "Filter Process Creation events and look for suspicious executables. The malicious file is `C:\\Users\\CyberJunkie\\Downloads\\Preventivo24.02.14.exe.exe` — note the double `.exe.exe` extension, a social engineering trick. Its parent process is `explorer.exe`, confirming the user launched it from the Downloads folder. **Answer: `C:\\Users\\CyberJunkie\\Downloads\\Preventivo24.02.14.exe.exe`**"
+      },
+      {
+        "stepNumber": 3,
+        "description": "Identify the distribution cloud drive",
+        "command": "Examine the process creation context and file delivery path",
+        "explanation": "The file was downloaded via Dropbox — this is visible in the process creation event chain showing the Dropbox download path. **Answer: `Dropbox`**"
+      },
+      {
+        "stepNumber": 4,
+        "description": "Detect timestomping on a PDF file",
+        "command": "jq 'select(.EventId==2)' sysmon.json",
+        "explanation": "Event ID 2 logs FileCreationTimeChanged events — this is Sysmon's specific detection for timestomping (T1070.006). Filter these events for PDF files to find the backdated timestamp: `2024-01-14 08:10:06`. The malware changed the creation date to make the PDF appear to be from a month earlier. **Answer: `2024-01-14 08:10:06`**"
+      },
+      {
+        "stepNumber": 5,
+        "description": "Find where once.cmd was created",
+        "command": "jq 'select(.EventId==11) | select(.TargetFilename | contains(\"once.cmd\"))' sysmon.json",
+        "explanation": "Filter FileCreate events for the filename `once.cmd`. The full path reveals the deeply nested staging directory: `C:\\Users\\CyberJunkie\\AppData\\Roaming\\Photo and Fax Vn\\Photo and vn 1.1.2\\install\\F97891C\\WindowsVolume\\Games\\once.cmd`. **Answer: the full path above**"
+      },
+      {
+        "stepNumber": 6,
+        "description": "Find the dummy domain for internet check",
+        "command": "jq 'select(.EventId==22)' sysmon.json",
+        "explanation": "Event ID 22 (DNS Query) shows the malware queried `www.example.com` — a standard internet connectivity check. Malware often pings a known-good domain before attempting C2 communication. **Answer: `www.example.com`**"
+      },
+      {
+        "stepNumber": 7,
+        "description": "Find the C2 IP address",
+        "command": "jq 'select(.EventId==3)' sysmon.json",
+        "explanation": "Event ID 3 (Network Connection) reveals the malicious process connected to `93.184.216.34`. **Answer: `93.184.216.34`**"
+      },
+      {
+        "stepNumber": 8,
+        "description": "Find when the process terminated itself",
+        "command": "jq 'select(.EventId==5)' sysmon.json",
+        "explanation": "Event ID 5 (Process Terminated) shows the dropper killed itself at `2024-02-14 03:41:58` after successfully deploying the backdoored UltraVNC variant. Self-termination is common for droppers to reduce their forensic footprint. **Answer: `2024-02-14 03:41:58`**"
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "brutus",
+    "nextChallengeId": "campfire-1"
+  }
+}

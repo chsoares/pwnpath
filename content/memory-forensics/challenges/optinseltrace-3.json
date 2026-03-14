@@ -1,0 +1,96 @@
+{
+  "challengeId": "optinseltrace-3",
+  "name": "OpTinselTrace-3",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/OpTinselTrace-3",
+  "difficulty": "medium",
+  "estimatedTime": "3-4 hours",
+  "keyTakeaway": "Multi-stage attack analysis — tracing a VBScript/PowerShell attack chain through memory, deobfuscating layered scripts, extracting shellcode, and identifying C2 infrastructure from process artifacts",
+  "tags": ["Volatility 3", "deobfuscation", "VBScript", "PowerShell", "shellcode", "C2", "filescan", "handles"],
+  "fundamentals": {
+    "content": "## Multi-Stage Attack Chain Analysis\n\n### Attack Stages in Memory\n\nSophisticated attacks rarely execute a single payload. Instead, they chain multiple stages:\n\n```\nStage 1: Initial access (phishing document, malicious link)\n  → Stage 2: Dropper (VBScript, PowerShell, HTA)\n    → Stage 3: Loader (shellcode, reflective DLL)\n      → Stage 4: C2 implant (beacon, reverse shell)\n```\n\nEach stage leaves artifacts in memory that can be traced with the right plugins.\n\n### VBScript and PowerShell Deobfuscation\n\nAttackers layer obfuscation to evade detection:\n\n**VBScript techniques:**\n- `Chr()` character codes instead of string literals\n- String concatenation: `\"pow\" & \"ersh\" & \"ell\"`\n- `Execute()` or `ExecuteGlobal()` for dynamic execution\n\n**PowerShell techniques:**\n- `-EncodedCommand` with Base64\n- `Invoke-Expression` (IEX) with string building\n- `[System.Convert]::FromBase64String()` for binary payloads\n- Environment variable concatenation: `$env:comspec[4,15,25]-join''`\n\n### Extracting Embedded Shellcode\n\nShellcode is raw machine code injected into process memory. To analyze it:\n1. Extract with `malfind` or `dumpfiles`\n2. Disassemble with `scdbg` or `objdump`\n3. Look for API hashing patterns, XOR decryption loops, and network connection setup\n4. Use `exiftool` on dumped files to check metadata for attribution clues",
+    "toolReferences": [
+      {
+        "tool": "Volatility 3",
+        "commands": [
+          "vol3 -f memory.raw windows.filescan | grep -iE '.vbs|.ps1|.bat|.hta'",
+          "vol3 -f memory.raw windows.dumpfiles --virtaddr <offset>",
+          "vol3 -f memory.raw windows.psscan",
+          "vol3 -f memory.raw windows.handles --pid <pid>",
+          "vol3 -f memory.raw windows.malfind"
+        ]
+      },
+      {
+        "tool": "Analysis tools",
+        "commands": [
+          "exiftool dumped_file.exe (check metadata and timestamps)",
+          "scdbg /f shellcode.bin (emulate shellcode)",
+          "CyberChef: From Base64 → XOR → deobfuscate payload"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "This is part of the OpTinselTrace Christmas 2023 event — the scenario involves a multi-stage attack on a holiday-themed organization.",
+      "Use filescan to locate script files (.vbs, .ps1, .bat) in memory. These are the initial attack stages.",
+      "Dump the VBScript file and manually deobfuscate it — replace Chr() codes with their ASCII equivalents to reveal the actual commands.",
+      "The VBScript likely spawns PowerShell — use psscan (not just pslist) to find even terminated PowerShell processes.",
+      "Use handles to see what files and registry keys a process had open. This reveals what the malware was accessing.",
+      "The PowerShell stage contains a Base64-encoded payload that decodes to shellcode or a next-stage loader.",
+      "Use exiftool on dumped executables to check compilation timestamps, author metadata, and other attribution clues.",
+      "The final stage connects to a C2 server — check netscan output and decoded script contents for IP addresses and domains."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** Part of the OpTinselTrace 2023 holiday event. A workstation was compromised through a multi-stage attack involving obfuscated scripts. Analyze the memory dump to trace the full attack chain from initial access to C2 communication.\n\n**Key Artifacts:**\n- Windows memory dump\n- Multi-stage attack: VBScript → PowerShell → shellcode → C2",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Scan for script files in memory",
+        "command": "vol3 -f memory.raw windows.filescan | grep -iE '.vbs|.ps1|.bat|.hta|.doc'",
+        "explanation": "Locate the initial attack scripts cached in memory. The filescan output reveals VBScript and PowerShell files that were executed during the compromise, along with their virtual addresses for extraction."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Dump the malicious scripts",
+        "command": "vol3 -f memory.raw windows.dumpfiles --virtaddr <vbs_offset>",
+        "explanation": "Extract the VBScript dropper from memory. This file contains the first stage of the attack and will reveal how subsequent stages are loaded."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Deobfuscate the VBScript",
+        "command": "Review the .vbs file — replace Chr(xx) with ASCII characters, concatenate split strings",
+        "explanation": "The VBScript uses Chr() character codes and string concatenation to hide its true purpose. Manually convert Chr() values to characters and join the fragments to reveal the PowerShell command it executes."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Find all PowerShell processes including terminated ones",
+        "command": "vol3 -f memory.raw windows.psscan | grep -i powershell",
+        "explanation": "psscan searches for EPROCESS structures by scanning memory pool tags, finding even terminated or hidden processes. This catches PowerShell instances that may have already exited but whose structures remain in memory."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Examine process handles for file access",
+        "command": "vol3 -f memory.raw windows.handles --pid <ps_pid>",
+        "explanation": "List all handles (files, registry keys, mutexes) held by the PowerShell process. This reveals what files the script accessed, what registry keys it modified, and any synchronization objects it created."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Decode the PowerShell payload",
+        "command": "CyberChef: From Base64 → decode embedded payload → identify shellcode or next stage",
+        "explanation": "The deobfuscated PowerShell contains a Base64-encoded payload. Decoding it reveals either raw shellcode or a .NET assembly that performs the actual malicious operations, including establishing the C2 channel."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Check dumped files with exiftool",
+        "command": "exiftool dumped_executable.exe",
+        "explanation": "Examine metadata of any dumped executables. Compilation timestamps, author fields, and internal names provide attribution clues and help identify the specific malware variant."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "mellitus",
+    "nextChallengeId": "aptnightmare"
+  }
+}
