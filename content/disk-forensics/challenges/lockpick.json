@@ -1,0 +1,99 @@
+{
+  "challengeId": "lockpick",
+  "name": "Lockpick",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Lockpick",
+  "difficulty": "very_easy",
+  "estimatedTime": "1-2 hours",
+  "keyTakeaway": "Ransomware investigation fundamentals — identifying encrypted files, recovering originals, and tracing ransomware execution artifacts",
+  "tags": ["ransomware", "file-recovery", "encryption", "windows", "incident-response"],
+  "fundamentals": {
+    "content": "## Ransomware Investigation Fundamentals\n\n### Understanding Ransomware from a Forensic Perspective\n\nRansomware encrypts victim files and demands payment for decryption. From a forensic standpoint, ransomware leaves a rich trail of artifacts because it must:\n1. **Execute** on the system (Prefetch, Amcache, event logs)\n2. **Enumerate** files to encrypt (filesystem access patterns)\n3. **Modify** hundreds or thousands of files (MFT changes, USN Journal entries)\n4. **Drop** ransom notes (new file creation)\n5. **Delete** originals (deleted file entries in MFT)\n\n### Identifying Ransomware Artifacts\n\n| Artifact | What It Reveals |\n|----------|----------------|\n| Changed file extensions | Ransomware family identification (e.g., `.lockbit`, `.encrypted`) |\n| Ransom notes | Attacker contact info, bitcoin addresses, family identification |\n| Prefetch entries | Ransomware executable name and execution time |\n| MFT timestamps | Exact time window of encryption (mass modification timestamps) |\n| Volume Shadow Copy deletion | Attackers often delete VSS to prevent recovery |\n| Event logs | Service installations, scheduled tasks for persistence |\n\n### File Recovery Approaches\n\nWhen investigating ransomware, recovery may be possible through:\n- **Volume Shadow Copies** (if not deleted by the ransomware)\n- **File carving** from unallocated space (original files before encryption)\n- **Recycle Bin artifacts** (if originals were recycled before encryption)\n- **Known decryptors** (if the ransomware family has been cracked)\n- **Backup analysis** (if backups were not also encrypted)\n\n### Common Ransomware Behaviors\n\n```\nPhase 1: Initial Access → Phishing email, RDP brute force, or exploit\nPhase 2: Reconnaissance → whoami, net user, net group, systeminfo\nPhase 3: Privilege Escalation → Exploit or credential theft\nPhase 4: Lateral Movement → PsExec, RDP, WMI\nPhase 5: Defense Evasion → Disable AV, delete logs\nPhase 6: Encryption → File enumeration and encryption\nPhase 7: Extortion → Ransom note deployment\n```",
+    "toolReferences": [
+      {
+        "tool": "Autopsy",
+        "commands": [
+          "Open disk image → browse filesystem for encrypted files",
+          "Keyword Search for ransom note filenames (README.txt, DECRYPT.txt)",
+          "Timeline Analysis to find the encryption window",
+          "File Type Mismatch module to detect renamed/encrypted files"
+        ]
+      },
+      {
+        "tool": "The Sleuth Kit",
+        "commands": [
+          "fls -r -d -o 2048 disk.E01 (list deleted files that may be originals)",
+          "icat -o 2048 disk.E01 <inode> > recovered.file (recover deleted originals)",
+          "tsk_recover -o 2048 -e disk.E01 ./recovered/ (bulk recover deleted files)"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start by examining the filesystem for encrypted files — look for unusual file extensions or files with high entropy that don't match their expected type.",
+      "Look for ransom note files — they're usually dropped in every directory the ransomware encrypts. The content identifies the ransomware family.",
+      "Check Prefetch files for the ransomware executable. The Prefetch entry will show when it first and last ran.",
+      "Examine the MFT or USN Journal for a burst of file modifications in a short time window — this is the encryption in action.",
+      "Check if Volume Shadow Copies were deleted — look for `vssadmin delete shadows` in event logs or command line history.",
+      "Look for the ransomware's persistence mechanism — registry Run keys, scheduled tasks, or services that ensure it survives reboots."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A company's file server has been hit by ransomware. Files are encrypted and ransom notes have appeared throughout the filesystem. You need to determine what ransomware family was used, how it got in, when the encryption occurred, and whether any files can be recovered.\n\n**Investigation goals:**\n\n| Question | Evidence Source |\n|----------|----------------|\n| What ransomware? | File extensions, ransom notes |\n| When did encryption occur? | MFT timestamps, Prefetch |\n| How did it get in? | Event logs, Prefetch |\n| Can files be recovered? | VSS, deleted file recovery |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify the ransomware family",
+        "command": "Browse the filesystem for ransom notes and encrypted file extensions",
+        "explanation": "Open the evidence in Autopsy or mount the image. Look for ransom note files (common names: `README.txt`, `DECRYPT_FILES.html`, `HOW_TO_RECOVER.txt`) and note the file extension appended to encrypted files. The ransom note content and extension pattern identify the specific ransomware family, which determines whether a free decryptor exists."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Determine the encryption time window",
+        "command": "MFTECmd.exe -f $MFT --csv . --csvf mft_output.csv",
+        "explanation": "Parse the MFT and sort by modification timestamp. Ransomware encryption creates a distinctive pattern: hundreds of files with modification timestamps within the same narrow time window (often minutes to hours). This burst of modifications pinpoints exactly when the encryption started and ended."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Find the ransomware executable via Prefetch",
+        "command": "PECmd.exe -d ./Prefetch --csv . --csvf prefetch.csv",
+        "explanation": "Parse Prefetch files to find the ransomware executable. Look for executables that ran for the first time just before the encryption window began. The Prefetch entry shows the executable name, path, run count, and last execution time — directly linking the program to the encryption event."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Check for Volume Shadow Copy deletion",
+        "command": "Search event logs for vssadmin or wmic shadowcopy commands",
+        "explanation": "Most ransomware deletes Volume Shadow Copies to prevent easy recovery. Look for evidence of `vssadmin delete shadows /all /quiet` or `wmic shadowcopy delete` in command line history, PowerShell logs (Event ID 4104), or process creation events (Event ID 4688). If VSS was not deleted, recovery may be straightforward."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Trace the initial access vector",
+        "command": "Examine event logs and Prefetch for pre-encryption activity",
+        "explanation": "Look at what happened before the encryption. Check for: RDP logins from unusual IPs (Event ID 4624 type 10), phishing-related artifacts (Office documents in Prefetch), or exploit indicators. The gap between initial access and encryption is the attacker's dwell time."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Attempt file recovery from unallocated space",
+        "command": "tsk_recover -o 2048 -e disk.E01 ./recovered/",
+        "explanation": "Some ransomware encrypts files by creating a new encrypted copy and deleting the original. If the original file's disk sectors haven't been overwritten, you can recover them. Use `tsk_recover` to pull all recoverable deleted files, or use `photorec` for signature-based file carving from unallocated space."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Identify persistence mechanisms",
+        "command": "rip.pl -r SYSTEM -p services && rip.pl -r NTUSER.DAT -p run",
+        "explanation": "Check whether the ransomware established persistence. Examine registry Run keys (`HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run`), services (`SYSTEM` hive), and scheduled tasks. Persistence means the ransomware could re-encrypt files even after recovery, so these must be cleaned before restoration."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Document the complete incident timeline",
+        "command": "Correlate all findings chronologically",
+        "explanation": "Build the final timeline: (1) Initial access method and timestamp, (2) Attacker reconnaissance commands, (3) Privilege escalation or lateral movement, (4) Volume Shadow Copy deletion, (5) Ransomware execution (from Prefetch), (6) Encryption window start and end (from MFT timestamps), (7) Ransom note deployment. This timeline drives the incident response and recovery plan."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "litter",
+    "nextChallengeId": "lockpick2-0"
+  }
+}

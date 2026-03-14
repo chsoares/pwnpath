@@ -1,0 +1,77 @@
+{
+  "id": "reverse-engineering",
+  "name": "Reverse Engineering",
+  "overview": "Reverse engineering is the process of analyzing compiled binaries to understand their behavior without access to source code. It is a foundational skill in cybersecurity — used in malware analysis, vulnerability research, exploit development, and CTF competitions.\n\nIn this learning path, you'll progress from basic ELF triage and string extraction to decompiling complex binaries in Ghidra, tracing execution with GDB, and defeating anti-debugging and obfuscation techniques. Every challenge is a real HackTheBox Reversing challenge, so you'll build hands-on experience with the same tools and workflows used by professional reverse engineers.\n\nBy the end of this trail, you'll be comfortable loading an unknown binary into a disassembler, navigating control flow graphs, identifying cryptographic routines, reconstructing algorithms from assembly, and reversing Python bytecode — skills that transfer directly to malware analysis, incident response, and vulnerability research roles.",
+  "prerequisites": [
+    "Basic understanding of how programs execute (compilation, linking, loading)",
+    "Familiarity with command-line Linux (navigating directories, running executables, reading man pages)",
+    "Elementary knowledge of C programming (variables, functions, pointers, control flow)",
+    "A HackTheBox account (free tier is sufficient for most challenges)"
+  ],
+  "coreTools": [
+    {
+      "name": "Ghidra",
+      "description": "NSA's open-source reverse engineering framework — provides disassembly, decompilation, and scripting for analyzing binaries across architectures",
+      "installCommands": {
+        "linux": "yay -S ghidra / sudo apt install ghidra",
+        "macos": "brew install --cask ghidra",
+        "windows": "Download from ghidra-sre.org"
+      }
+    },
+    {
+      "name": "GDB + pwndbg",
+      "description": "GNU Debugger enhanced with pwndbg or GEF for modern debugging — set breakpoints, inspect registers, step through execution, and patch binaries at runtime",
+      "installCommands": {
+        "linux": "sudo apt install gdb && git clone https://github.com/pwndbg/pwndbg && cd pwndbg && ./setup.sh",
+        "macos": "brew install gdb (limited on macOS — consider using a Linux VM)",
+        "windows": "Use WSL2 with Ubuntu for full GDB + pwndbg support"
+      }
+    },
+    {
+      "name": "radare2 / rizin",
+      "description": "CLI-first reverse engineering framework — disassembly, debugging, patching, and scripting in a single tool",
+      "installCommands": {
+        "linux": "yay -S radare2 / sudo apt install radare2",
+        "macos": "brew install radare2",
+        "windows": "Download from radare.org or use WSL"
+      }
+    },
+    {
+      "name": "ltrace / strace",
+      "description": "Library call and system call tracers — observe what a binary does at runtime without a full debugger",
+      "installCommands": {
+        "linux": "sudo apt install ltrace strace (usually pre-installed)",
+        "macos": "dtruss (built-in, requires SIP disabled) / brew install strace is not available natively",
+        "windows": "Not available — use API Monitor or Process Monitor instead"
+      }
+    },
+    {
+      "name": "objdump / readelf",
+      "description": "ELF binary inspection utilities — view headers, sections, symbol tables, and disassembly from the command line",
+      "installCommands": {
+        "linux": "Included with binutils (pre-installed on most distributions)",
+        "macos": "brew install binutils (provides gobjdump and greadelf)",
+        "windows": "Available through WSL or Cygwin"
+      }
+    },
+    {
+      "name": "uncompyle6 / pycdc",
+      "description": "Python bytecode decompilers — reconstruct Python source code from .pyc compiled files",
+      "installCommands": {
+        "linux": "pip install uncompyle6 / git clone https://github.com/zrax/pycdc && cmake . && make",
+        "macos": "pip install uncompyle6 / brew install pycdc",
+        "windows": "pip install uncompyle6"
+      }
+    },
+    {
+      "name": "x64dbg",
+      "description": "Open-source Windows debugger — GUI-based dynamic analysis for PE executables with plugin support",
+      "installCommands": {
+        "linux": "Not available natively — use Wine or a Windows VM",
+        "macos": "Not available natively — use a Windows VM",
+        "windows": "Download from x64dbg.com"
+      }
+    }
+  ],
+  "entryRecommendation": "Start with **Behind the Scenes** if you're new to reverse engineering — it introduces basic ELF analysis with `strings`, `ltrace`, and `file`, so you can learn the triage workflow before diving into disassemblers. If you're already comfortable with static analysis basics, skip ahead to **Hunting** to tackle your first Windows PE binary in Ghidra."
+}

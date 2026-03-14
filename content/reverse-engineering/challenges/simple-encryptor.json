@@ -1,0 +1,87 @@
+{
+  "challengeId": "simple-encryptor",
+  "name": "Simple Encryptor",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/Simple%20Encryptor",
+  "difficulty": "very_easy",
+  "estimatedTime": "30 min - 1 hour",
+  "keyTakeaway": "Algorithm reversal methodology — reading XOR and bit rotation operations in decompiled C code and reversing them in the correct order with a Python solver script",
+  "tags": ["xor", "bit-rotation", "algorithm-reversal", "ghidra", "python-scripting"],
+  "fundamentals": {
+    "content": "## Reversing XOR and Bit Rotation Algorithms\n\n### The Algorithm Reversal Methodology\n\nWhen you encounter a binary that encrypts data using a series of operations, the core methodology is always the same:\n\n1. **Read** the decompiled encryption code top to bottom\n2. **List** every operation in order\n3. **Reverse** the list (last operation first)\n4. **Invert** each operation\n5. **Implement** the reversed algorithm in Python\n\nThis is the single most important skill in reverse engineering — almost every challenge boils down to understanding what transformations were applied and undoing them.\n\n### XOR Operations\n\nXOR (`^`) is the most common operation in reversible encryption because it is its own inverse:\n\n```c\n// Encryption\nencrypted = plaintext ^ key;\n\n// Decryption — same operation!\nplaintext = encrypted ^ key;\n```\n\nIn decompiled code, XOR appears as:\n```c\nlocal_14 = local_14 ^ some_value;\n```\n\nWhen the key is generated from `rand()` with a known seed (set via `srand()`), you can reproduce the exact same sequence of random numbers in your solver script.\n\n### Bit Rotation Operations\n\nBit rotations (also called circular shifts) move bits around within a byte or word. Unlike regular shifts, no bits are lost — they wrap around:\n\n**Rotate Left (ROL):** Bits shifted out the left side come back on the right\n```c\n// Rotate left by n bits (8-bit)\nresult = (value << n) | (value >> (8 - n));\n```\n\n**Rotate Right (ROR):** The inverse of rotate left\n```c\n// Rotate right by n bits (8-bit)\nresult = (value >> n) | (value << (8 - n));\n```\n\nThe critical insight: **ROL by N is reversed by ROR by N**, and vice versa. In Ghidra's decompiled output, rotations often appear using C bitwise operators since C has no native rotation operator:\n\n```c\n// This is a rotate left by 3:\nlocal_14 = (local_14 << 3) | (local_14 >> 5);\n\n// Reverse it with rotate right by 3:\nvalue = (value >> 3) | (value << 5);\n```\n\n### Reading Ghidra Decompiled C\n\nGhidra produces C-like pseudocode that closely mirrors the original source. Key things to recognize:\n\n- **`local_XX` variables** are stack-allocated variables. Ghidra auto-names them based on stack offset.\n- **Type casts** like `(byte)` or `(uint)` indicate the width of operations — critical for rotations (8-bit vs 32-bit rotation yields different results).\n- **`srand(time(NULL))`** followed by `rand()` calls means the random sequence depends on the timestamp. If the encrypted output file's modification time is known, you can recover the seed.\n\n### Building a Python Solver\n\nThe general pattern for a solver script:\n\n```python\nimport ctypes\n\n# Step 1: Read the encrypted data\nwith open('flag.enc', 'rb') as f:\n    data = list(f.read())\n\n# Step 2: Reproduce the key stream (if rand-based)\nlibc = ctypes.CDLL('libc.so.6')\nlibc.srand(known_seed)\nkeys = [libc.rand() for _ in range(len(data))]\n\n# Step 3: Reverse operations in reverse order\nfor i in range(len(data)):\n    # If encryption did: ROL then XOR\n    # Decryption does: XOR then ROR\n    data[i] ^= (keys[i] & 0xFF)\n    data[i] = ror(data[i], rotation_amount, 8)\n\nprint(bytes(data).decode())\n```\n\nThe solver must replicate the **exact same PRNG state** and apply the **inverse operations in reverse order**. Getting either wrong produces garbage output.",
+    "toolReferences": [
+      {
+        "tool": "Ghidra",
+        "commands": [
+          "Navigate to main() → read the encryption loop in the decompiler",
+          "Identify srand() seed and rand() usage — determines key stream",
+          "Check data types (byte vs int) — determines rotation bit width",
+          "Follow the encrypted output path — identify output file name"
+        ]
+      },
+      {
+        "tool": "Python",
+        "commands": [
+          "import ctypes; libc = ctypes.CDLL('libc.so.6') — access C library rand()/srand()",
+          "libc.srand(seed); key = libc.rand() — reproduce the PRNG sequence",
+          "ror = lambda val, r, w: ((val >> r) | (val << (w - r))) & ((1 << w) - 1) — rotate right",
+          "rol = lambda val, r, w: ((val << r) | (val >> (w - r))) & ((1 << w) - 1) — rotate left"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "The binary encrypts a flag and writes the result to a file. You are given the encrypted output. Your job is to reverse the encryption.",
+      "Open the binary in Ghidra and decompile `main()`. The encryption logic is a simple loop with two operations applied to each byte.",
+      "Look for `srand()` and `rand()` calls. The random seed determines the key stream — if you can reproduce it, you know every key byte.",
+      "Pay attention to the ORDER of operations. If encryption does operation A then operation B, decryption must do inverse-B then inverse-A.",
+      "Bit rotations in C look like `(val << n) | (val >> (8-n))`. Identify the direction and amount, then rotate the opposite way in your solver."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** You are given a binary (`encrypt`) and its output (`flag.enc`). The binary encrypted the flag using XOR and bit rotation operations with keys derived from `rand()`. You need to reverse the encryption to recover the original flag.\n\n**Approach:** Decompile the binary in Ghidra to understand the encryption algorithm, then write a Python script that reproduces the PRNG key stream and applies the inverse operations in reverse order.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Triage the binary and encrypted file",
+        "command": "file encrypt && xxd flag.enc | head -5",
+        "explanation": "Confirm the binary is a standard ELF executable. Examine the encrypted file to see its size — this tells you the flag length. Note the file modification timestamp of `flag.enc`, as it may be relevant if the encryption seed is time-based."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Decompile in Ghidra and read the encryption loop",
+        "command": "Ghidra: Import encrypt → Analyze → Navigate to main()",
+        "explanation": "The decompiled `main()` function reveals the encryption logic: (1) the flag string is read, (2) `srand()` is called with a seed (often `time(NULL)`), (3) a loop iterates over each byte applying two operations using `rand()` values — typically a XOR followed by a bit rotation (or vice versa), (4) the result is written to `flag.enc`."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Identify the exact operations and their order",
+        "command": "Ghidra: Read the loop body carefully — note operation order",
+        "explanation": "In the loop, each byte undergoes two transformations. For example: first XOR with `(rand() & 0xFF)`, then rotate left by `(rand() & 7)`. Document the exact order and the bit masks applied to the rand() values. The masks determine how much of the random value is used (e.g., `& 0xFF` = one byte, `& 7` = rotation amount 0-7)."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Determine the PRNG seed",
+        "command": "stat flag.enc — check modification time",
+        "explanation": "If the seed is `time(NULL)`, it equals the Unix timestamp when encryption ran. The file's modification time is a close approximation. Convert it to a Unix timestamp. If the exact second is uncertain, you can brute-force a small window of timestamps."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Write the decryption script",
+        "command": "python3 solve.py",
+        "explanation": "The solver script: (1) reads the encrypted bytes from `flag.enc`, (2) uses `ctypes` to call the C library's `srand(seed)` and `rand()` to reproduce the exact key stream, (3) collects all random values first (since each loop iteration may call `rand()` multiple times), (4) applies inverse operations in REVERSE order — if encryption did XOR then ROL, decryption does ROR then XOR. The output is the plaintext flag."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Verify the flag",
+        "command": "python3 solve.py → HTB{...}",
+        "explanation": "The script outputs the decrypted flag in `HTB{...}` format. If the output is garbled, check: (1) correct seed value, (2) correct number of `rand()` calls per iteration, (3) operations applied in reverse order, (4) bit width matches (8-bit rotation vs 32-bit). Try adjacent timestamps if the seed was time-based."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "shattered-tablet",
+    "nextChallengeId": "hunting"
+  }
+}

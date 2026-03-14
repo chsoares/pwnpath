@@ -1,0 +1,90 @@
+{
+  "challengeId": "lootstash",
+  "name": "LootStash",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/LootStash",
+  "difficulty": "medium",
+  "estimatedTime": "2 - 4 hours",
+  "keyTakeaway": "Encryption algorithm reversing — identifying and reimplementing custom or standard cryptographic routines found in compiled code",
+  "tags": ["elf", "ghidra", "encryption", "cryptography", "algorithm", "xor", "custom-cipher"],
+  "fundamentals": {
+    "content": "## Recognizing Cryptographic Patterns in Decompiled Code\n\n### Why Crypto Reversing Matters\n\nMalware, ransomware, and CTF challenges frequently use encryption to hide data. As a reverse engineer, you need to:\n- **Identify** whether a routine is implementing a known algorithm or a custom one\n- **Extract** keys, IVs, and encrypted data from the binary\n- **Reimplement** the decryption in a scripting language\n\n### Identifying Known Algorithms\n\nSeveral telltale signs reveal standard algorithms in compiled code:\n\n**AES (Rijndael):**\n- Look for the S-box: a 256-byte lookup table starting with `0x63, 0x7C, 0x77, 0x7B, 0xF2...`\n- Key schedule with `RCON` values: `0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80...`\n- Operations in groups of 16 bytes (128-bit block size)\n\n**RC4:**\n- Two-phase algorithm: Key Scheduling Algorithm (KSA) + Pseudo-Random Generation Algorithm (PRGA)\n- KSA: a 256-byte array initialized as `S[i] = i`, then shuffled using the key\n- Characteristic swap pattern: `S[i], S[j] = S[j], S[i]` inside a loop of 256 iterations\n\n**XOR Cipher:**\n- Simple `buf[i] ^= key[i % key_len]` pattern\n- Self-inverting: encryption and decryption are the same operation\n\n**Base64 Encoding:**\n- Lookup table: `ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/`\n- Processing 3 bytes → 4 characters\n\n### Custom Ciphers\n\nCTF challenges often implement custom encryption that combines multiple operations:\n\n```c\nfor (int i = 0; i < len; i++) {\n    data[i] = ((data[i] ^ key1) + key2) ^ (i * key3);\n    data[i] = (data[i] << 3) | (data[i] >> 5);  // Rotate left by 3\n}\n```\n\nTo reverse custom ciphers:\n1. Write down each operation in order\n2. Reverse the operation order\n3. Invert each operation:\n   - XOR → XOR (same key)\n   - ADD → SUB\n   - Rotate left N → Rotate right N\n   - Multiply → find modular inverse (or brute force)\n\n### Extracting Keys from Binaries\n\nKeys may be:\n- **Hardcoded** in `.rodata` as byte arrays\n- **Derived** from a passphrase using a KDF\n- **Generated** at runtime from predictable seeds\n- **Split** across multiple variables or functions\n\nIn Ghidra, use **Defined Strings** and **Search → For Scalars** to find key material.",
+    "toolReferences": [
+      {
+        "tool": "Ghidra",
+        "commands": [
+          "Search → For Scalars → enter known S-box values — find AES implementations",
+          "Window → Defined Strings → search for base64 alphabet — find encoding routines",
+          "Select large data block → Right-click → Data → byte array — define key/data arrays",
+          "Search → For Byte Sequence → 63 7C 77 7B F2 — find AES S-box in memory"
+        ]
+      },
+      {
+        "tool": "Python",
+        "commands": [
+          "from Crypto.Cipher import AES — decrypt AES with pycryptodome",
+          "from Crypto.Cipher import ARC4 — decrypt RC4",
+          "import base64; base64.b64decode(data) — decode base64",
+          "bytes(a ^ b for a, b in zip(data, itertools.cycle(key))) — XOR cipher"
+        ]
+      },
+      {
+        "tool": "CyberChef",
+        "commands": [
+          "Operations → AES Decrypt → provide key, IV, and mode",
+          "Operations → XOR → provide key for multi-byte XOR",
+          "Operations → ROT13 / Caesar Cipher — simple substitution"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "The binary encrypts or encodes the flag before comparison. Find the function that performs this transformation.",
+      "Look for characteristic constants that identify known algorithms. A 256-byte array initialized sequentially suggests RC4. A specific S-box pattern indicates AES.",
+      "If it's a custom cipher, trace each operation carefully. Write them down in order — you'll need to reverse them.",
+      "The encryption key is somewhere in the binary. Check .rodata for byte arrays, or look for string constants that are used as passphrases.",
+      "Once you identify the algorithm and key, decrypt the stored ciphertext. If it's a custom cipher, reverse each operation in reverse order.",
+      "For XOR-based encryption, remember it's self-inverting: applying the same XOR key to ciphertext produces plaintext."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A binary contains encrypted data (the flag) protected by a cryptographic routine. You need to identify the algorithm, extract the key and ciphertext, and decrypt the flag.\n\n**Approach:** Use Ghidra to identify the encryption routine, determine whether it's a known algorithm or custom cipher, extract all necessary parameters, and write a decryption script.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify the encryption function",
+        "command": "Ghidra: Analyze main() → follow the function that processes the flag data",
+        "explanation": "In the decompiled main function, look for calls to functions that take a data buffer and a key as arguments. These functions typically contain loops with XOR, shift, or lookup table operations. Identify which function performs the encryption/encoding."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Determine the algorithm type",
+        "command": "Ghidra: Analyze the encryption function's implementation",
+        "explanation": "Examine the encryption function's decompiled code. Look for telltale signs: (1) A 256-byte array initialized 0-255 then shuffled = RC4, (2) A specific S-box lookup table = AES, (3) Simple XOR in a loop = XOR cipher, (4) Multiple arithmetic operations = custom cipher. The structure of the algorithm determines your decryption approach."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Extract the key and ciphertext",
+        "command": "Ghidra: Navigate to data references → copy key and encrypted data arrays",
+        "explanation": "The encryption key and the encrypted flag data are stored in the binary, typically in `.rodata` or initialized on the stack. Navigate to each data reference from the encryption function and copy the byte values. Note the key length and ciphertext length."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Write the decryption script",
+        "command": "python3 decrypt.py",
+        "explanation": "Implement the decryption in Python. For known algorithms, use the `pycryptodome` library (e.g., `from Crypto.Cipher import ARC4`). For custom ciphers, reverse each operation: if encryption does XOR then ADD then rotate-left, decryption does rotate-right then SUB then XOR. Apply operations in reverse order."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Verify and extract the flag",
+        "command": "python3 decrypt.py → should output HTB{...}",
+        "explanation": "Run the decryption script. The output should be the plaintext flag in HTB{...} format. If the output is garbled, double-check: (1) correct byte order (endianness), (2) correct key, (3) operation order matches the reverse of encryption, (4) data types and truncation (watch for `& 0xFF` for byte operations)."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "tear-or-dear",
+    "nextChallengeId": "debugme"
+  }
+}

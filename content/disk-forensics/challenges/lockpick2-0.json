@@ -1,0 +1,100 @@
+{
+  "challengeId": "lockpick2-0",
+  "name": "Lockpick2.0",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Lockpick2.0",
+  "difficulty": "easy",
+  "estimatedTime": "2-3 hours",
+  "keyTakeaway": "Advanced ransomware forensics — registry analysis for persistence mechanisms, Group Policy abuse, and scheduled task forensics",
+  "tags": ["ransomware", "registry", "group-policy", "scheduled-tasks", "persistence", "active-directory"],
+  "fundamentals": {
+    "content": "## Advanced Ransomware Forensics: Registry & Group Policy\n\n### Beyond Basic Ransomware Analysis\n\nWhile basic ransomware analysis focuses on identifying the encrypted files and ransom notes, advanced investigation requires understanding how the ransomware was deployed across the network. Enterprise ransomware operators increasingly abuse legitimate Windows management tools — particularly **Group Policy Objects (GPO)** and **Scheduled Tasks** — to deploy ransomware at scale.\n\n### Group Policy as a Deployment Mechanism\n\nGroup Policy allows domain administrators to push configurations, scripts, and software to all domain-joined machines simultaneously. Attackers who compromise a Domain Controller abuse this by:\n1. Creating a malicious GPO or modifying an existing one\n2. Adding a startup script or scheduled task via the GPO\n3. Forcing a Group Policy update (`gpupdate /force`) across the domain\n4. The ransomware executes on all machines at the next policy refresh\n\nGPO artifacts are stored in:\n- **SYSVOL**: `\\\\<domain>\\SYSVOL\\<domain>\\Policies\\{GUID}\\`\n- **Registry**: `HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Group Policy\\`\n- **Event logs**: Event ID 4739 (domain policy changed), Event ID 5136 (directory service object modified)\n\n### Scheduled Task Forensics\n\nScheduled tasks are a favorite persistence mechanism because they:\n- Survive reboots\n- Can run with SYSTEM privileges\n- Can be deployed via GPO to all machines\n- Leave artifacts in multiple locations\n\nScheduled task evidence locations:\n\n| Location | Details |\n|----------|--------|\n| `C:\\Windows\\System32\\Tasks\\` | XML task definition files |\n| `HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\` | Task cache in registry |\n| Event ID 4698 | Scheduled task created |\n| Event ID 4702 | Scheduled task updated |\n| Event ID 106 (Task Scheduler log) | Task registered |\n\n### Registry Persistence Keys\n\nCommon registry locations attackers use for persistence:\n```\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\nHKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce\nHKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\nHKLM\\SYSTEM\\CurrentControlSet\\Services\nHKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\Shell\n```",
+    "toolReferences": [
+      {
+        "tool": "RegRipper",
+        "commands": [
+          "rip.pl -r SOFTWARE -p gpo (extract Group Policy settings)",
+          "rip.pl -r SOFTWARE -p tasks (extract scheduled task references)",
+          "rip.pl -r SYSTEM -p services (list installed services)",
+          "rip.pl -r NTUSER.DAT -p run (check user Run key persistence)"
+        ]
+      },
+      {
+        "tool": "Registry Explorer (Eric Zimmerman)",
+        "commands": [
+          "Load SOFTWARE hive → navigate to Group Policy keys",
+          "Load SYSTEM hive → navigate to CurrentControlSet\\Services",
+          "Compare timestamps between legitimate and malicious entries",
+          "Export specific keys for reporting"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "This is an evolution of the Lockpick scenario — the ransomware deployment was more sophisticated, using Active Directory infrastructure for distribution.",
+      "Look at Group Policy artifacts to understand how the ransomware was pushed to multiple machines simultaneously.",
+      "Examine scheduled tasks (both XML files and registry entries) — the ransomware likely used a scheduled task for execution timing.",
+      "Registry analysis is key here. Focus on the SOFTWARE and SYSTEM hives for GPO-related keys and service installations.",
+      "Check the SYSVOL folder structure for malicious scripts or executables placed there by the attacker.",
+      "Event logs (particularly Security and Task Scheduler logs) contain critical evidence of when GPO changes were made and tasks were registered."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** The same organization from Lockpick has been hit again, but this time the ransomware deployment was more sophisticated. The attacker compromised the Domain Controller and used Group Policy to deploy ransomware across the entire domain. You need to analyze the artifacts to understand the deployment mechanism.\n\n**Key investigation areas:**\n\n| Area | Artifacts |\n|------|----------|\n| GPO abuse | SYSVOL, SOFTWARE registry, event logs |\n| Scheduled tasks | Task XML files, TaskCache registry, Event ID 4698 |\n| Persistence | Registry Run keys, services |\n| Timeline | Event log correlation |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Examine Group Policy artifacts for malicious modifications",
+        "command": "rip.pl -r SOFTWARE -p gpo",
+        "explanation": "Parse the SOFTWARE registry hive for Group Policy settings. Look for recently modified GPOs — particularly any that reference scripts, executables, or scheduled tasks. The GPO GUID and modification timestamp help identify when the attacker pushed the malicious policy."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Analyze SYSVOL for malicious scripts and payloads",
+        "command": "Browse \\\\domain\\SYSVOL\\domain\\Policies\\{GPO-GUID}\\ for scripts",
+        "explanation": "SYSVOL is replicated to all Domain Controllers and accessible to all domain machines. The attacker placed the ransomware executable or a deployment script in the GPO's Scripts folder. Look in `Machine\\Scripts\\Startup\\` and `Machine\\Scripts\\Shutdown\\` within the malicious GPO's folder."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Parse scheduled tasks for ransomware execution",
+        "command": "Examine C:\\Windows\\System32\\Tasks\\ for malicious task XML files",
+        "explanation": "Open the scheduled task XML files and look for: (1) tasks created around the compromise timeframe, (2) tasks pointing to unusual executables, (3) tasks configured to run as SYSTEM, (4) tasks with immediate or one-time triggers. The XML contains the full task definition including the command to execute."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Cross-reference with Task Scheduler registry cache",
+        "command": "Registry Explorer: HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tree",
+        "explanation": "The TaskCache registry key provides a second source of scheduled task evidence. Each task has a GUID that maps to entries in `TaskCache\\Tasks\\{GUID}` containing the task's creation time, last run time, and triggers. Compare with the XML files to detect any discrepancies or deleted tasks."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Check registry for additional persistence mechanisms",
+        "command": "rip.pl -r SYSTEM -p services && rip.pl -r SOFTWARE -p run",
+        "explanation": "Beyond GPO and scheduled tasks, check for additional persistence: malicious services installed in the SYSTEM hive, Run/RunOnce keys in SOFTWARE and NTUSER.DAT hives, and Winlogon Shell modifications. Attackers often layer multiple persistence mechanisms to ensure the ransomware re-executes."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Analyze event logs for GPO modification and task creation",
+        "command": "Filter Security log for Event IDs 4698 (task created) and 4739 (domain policy changed)",
+        "explanation": "Event ID 4698 logs scheduled task creation with the full task XML content. Event ID 4739 logs domain policy changes. These events provide exact timestamps and the account used to make the changes, confirming whether the Domain Admin account was compromised."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Identify the compromised account and escalation path",
+        "command": "Examine logon events (Event ID 4624) for the Domain Admin account",
+        "explanation": "Determine how the attacker gained Domain Admin privileges. Look for: unusual logon sources for the admin account (logon type 10 = RDP from unexpected IPs), pass-the-hash indicators (logon type 9 with NTLM authentication), or service account abuse. This reveals the initial compromise vector."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Build the enterprise-wide attack timeline",
+        "command": "Correlate GPO, scheduled task, and event log timestamps",
+        "explanation": "Reconstruct the full attack: (1) Domain Admin account compromised, (2) Attacker accesses Domain Controller, (3) Malicious GPO created or modified (timestamp from registry/event logs), (4) Ransomware payload placed in SYSVOL, (5) Scheduled task configured as execution trigger, (6) GPO pushed to domain machines, (7) Ransomware executes on all endpoints simultaneously. This enterprise-wide deployment is what makes this attack significantly more impactful than a single-machine infection."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "lockpick",
+    "nextChallengeId": "keepass"
+  }
+}

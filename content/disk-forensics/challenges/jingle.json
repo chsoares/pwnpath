@@ -1,0 +1,101 @@
+{
+  "challengeId": "jingle",
+  "name": "Jingle",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Jingle",
+  "difficulty": "medium",
+  "estimatedTime": "2-3 hours",
+  "keyTakeaway": "Full disk image investigation — mounting and triaging a Windows disk image to reconstruct an incident from filesystem and registry artifacts",
+  "tags": ["disk-image", "triage", "windows-forensics", "mounting", "artifact-collection", "timeline"],
+  "fundamentals": {
+    "content": "## Full Disk Image Triage & Investigation\n\n### The Disk Image Investigation Workflow\n\nWhen handed a full disk image (E01, raw/dd, VMDK, VHD), a structured triage process ensures you don't miss critical evidence. The key is working from broad to narrow: start with the big picture, then drill into specific artifacts based on initial findings.\n\n### Step 1: Image Verification and Mounting\n\nBefore any analysis:\n1. **Verify integrity** — compare hash against acquisition log\n2. **Mount read-only** — never modify the evidence\n3. **Document the partition layout** — understand the disk structure\n\n### Step 2: Filesystem Overview\n\n| First Actions | Why |\n|--------------|-----|\n| Partition layout (`mmls`) | Understand disk structure (OS, data, recovery partitions) |\n| Filesystem info (`fsstat`) | NTFS version, volume serial, cluster size |\n| Root directory listing | Identify OS version, installed programs |\n| User profiles | Identify user accounts and their activity |\n\n### Step 3: Artifact Collection Priority\n\nIn a triage scenario with limited time, collect artifacts in this priority order:\n\n1. **Registry hives** (SAM, SYSTEM, SOFTWARE, SECURITY, NTUSER.DAT) — system config, user accounts, persistence\n2. **Event logs** (`C:\\Windows\\System32\\winevt\\Logs\\`) — security events, logons, process creation\n3. **Prefetch files** (`C:\\Windows\\Prefetch\\`) — program execution history\n4. **Browser data** — downloads, history, cached credentials\n5. **Recent files** (LNK, Jump Lists, MRU lists) — user activity\n6. **$MFT and USN Journal** — filesystem metadata and change log\n\n### Step 4: User Profile Analysis\n\nEach user profile under `C:\\Users\\<username>\\` contains:\n- `NTUSER.DAT` — user-specific registry hive\n- `AppData\\Local\\Microsoft\\Windows\\UsrClass.dat` — Shellbags\n- `AppData\\Roaming\\Microsoft\\Windows\\Recent\\` — LNK files\n- `AppData\\Local\\Microsoft\\Windows\\Explorer\\` — Thumbcache\n- Desktop, Documents, Downloads — user files\n\n### Common Disk Image Formats\n\n| Format | Extension | Tool to Mount |\n|--------|----------|---------------|\n| EnCase | .E01 | ewfmount, FTK Imager |\n| Raw/dd | .raw, .dd, .img | mount -o loop |\n| VMware | .vmdk | vmware-mount, qemu-nbd |\n| Hyper-V | .vhd, .vhdx | guestmount, vhdimount |\n| AFF4 | .aff4 | aff4imager |",
+    "toolReferences": [
+      {
+        "tool": "The Sleuth Kit + Autopsy",
+        "commands": [
+          "mmls disk.E01 (show partition layout)",
+          "fsstat -o <offset> disk.E01 (filesystem details)",
+          "fls -r -o <offset> disk.E01 (recursive file listing)",
+          "icat -o <offset> disk.E01 <inode> > extracted_file (extract file by inode)",
+          "Autopsy: Create new case → Add disk image → Run ingest modules"
+        ]
+      },
+      {
+        "tool": "Image Mounting",
+        "commands": [
+          "ewfmount disk.E01 /mnt/ewf (mount E01 as raw device)",
+          "mount -o ro,loop,offset=$((sector*512)) /mnt/ewf/ewf1 /mnt/disk (mount partition)",
+          "qemu-nbd -r -c /dev/nbd0 disk.vmdk && mount -o ro /dev/nbd0p1 /mnt/disk (mount VMDK)",
+          "guestmount -a disk.vhd -i --ro /mnt/disk (mount VHD with libguestfs)"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start with the big picture — mount or open the disk image and understand its partition layout before diving into specific artifacts.",
+      "Identify all user profiles on the system. Each user's NTUSER.DAT and file activity tells a different story.",
+      "Registry hives are your first priority — extract SAM, SYSTEM, SOFTWARE, and each user's NTUSER.DAT for offline analysis.",
+      "Check Prefetch files to identify which programs were executed on the system. Unusual executables are immediate red flags.",
+      "Event logs provide timestamps for logon events, service installations, and process creation that help build the investigation timeline.",
+      "Look at browser history and downloads — many attacks start with a malicious download from a web browser."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** You've received a full disk image from a compromised Windows workstation. Your task is to triage the image, identify indicators of compromise, and reconstruct what happened on the system.\n\n**Triage workflow:**\n\n| Phase | Action | Tools |\n|-------|--------|-------|\n| Mount | Verify and mount image read-only | ewfmount, mount |\n| Overview | Partition layout, OS version, users | mmls, fsstat |\n| Collection | Extract key artifacts | icat, fls |\n| Analysis | Parse artifacts for IOCs | RegRipper, PECmd, EvtxECmd |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Verify image integrity and examine partition layout",
+        "command": "img_stat disk.E01 && mmls disk.E01",
+        "explanation": "First verify the image metadata and examine the partition layout. `mmls` shows all partitions with their start offsets (in sectors), sizes, and types. A typical Windows disk has: a small boot partition, the main NTFS OS partition, and possibly a recovery partition. Note the sector offset of the main NTFS partition — you'll need it for all subsequent commands."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Mount the image and get a filesystem overview",
+        "command": "ewfmount disk.E01 /mnt/ewf && mount -o ro,loop,offset=$((2048*512)) /mnt/ewf/ewf1 /mnt/disk",
+        "explanation": "Mount the image read-only. Replace 2048 with the actual sector offset from mmls. Once mounted, browse the root directory to identify: Windows version (check `C:\\Windows\\System32\\config\\`), installed programs (`C:\\Program Files\\`), and user profiles (`C:\\Users\\`). This gives you the system context."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Extract and analyze registry hives",
+        "command": "cp /mnt/disk/Windows/System32/config/{SAM,SYSTEM,SOFTWARE,SECURITY} ./evidence/ && cp /mnt/disk/Users/*/NTUSER.DAT ./evidence/",
+        "explanation": "Copy all registry hives for offline analysis. Run RegRipper against each: SYSTEM for computer name, timezone, and services; SOFTWARE for installed software and Run keys; SAM for local user accounts; NTUSER.DAT for per-user settings, recent documents, and typed paths. This is the single most informative step in disk image triage."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Parse Prefetch for program execution history",
+        "command": "PECmd.exe -d /mnt/disk/Windows/Prefetch --csv . --csvf prefetch.csv",
+        "explanation": "Prefetch files reveal every program that was executed. Sort by first and last run times. Focus on: (1) Programs in suspicious locations (Temp, Downloads, AppData), (2) Known attacker tools (mimikatz, psexec, procdump), (3) System utilities used unusually (certutil, bitsadmin for downloads), (4) Programs run only once (one-off attacker tools)."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Analyze event logs for security events",
+        "command": "EvtxECmd.exe -d /mnt/disk/Windows/System32/winevt/Logs --csv . --csvf events.csv",
+        "explanation": "Parse Windows event logs focusing on: Security.evtx for logon events (4624/4625), process creation (4688), and privilege use (4672); System.evtx for service installations (7045) and system events; PowerShell operational log for script execution (4104). These provide the authoritative timeline of system activity."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Examine user activity through LNK files and browser data",
+        "command": "LECmd.exe -d /mnt/disk/Users --csv . --csvf lnk_files.csv",
+        "explanation": "Parse LNK files to see what documents and files users accessed. Also examine browser data: Chrome history at `AppData\\Local\\Google\\Chrome\\User Data\\Default\\History` (SQLite database), Firefox at `AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\`. Look for downloads of suspicious files, visits to attacker infrastructure, or phishing pages."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Check for suspicious files in common staging locations",
+        "command": "fls -r -o 2048 disk.E01 | grep -i 'temp\\|downloads\\|appdata\\|programdata\\|public'",
+        "explanation": "Attackers commonly stage tools and malware in: `C:\\Windows\\Temp\\`, `C:\\Users\\<user>\\AppData\\Local\\Temp\\`, `C:\\ProgramData\\`, and `C:\\Users\\Public\\`. List these directories (including deleted files with `-d` flag) and look for executables, scripts, or archives that don't belong there."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Generate a super timeline for comprehensive analysis",
+        "command": "log2timeline.py timeline.plaso disk.E01 && psort.py -o l2tcsv timeline.plaso -w timeline.csv",
+        "explanation": "For the most thorough analysis, generate a super timeline using plaso. This ingests ALL artifact sources (filesystem timestamps, registry modifications, event logs, browser history, Prefetch, LNK files) and merges them into a single chronological timeline. Filter to the incident window and walk through events minute by minute to reconstruct the complete attack narrative."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "persistenceisfutile",
+    "nextChallengeId": "fragility"
+  }
+}

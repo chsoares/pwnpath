@@ -1,0 +1,112 @@
+{
+  "challengeId": "jugglin",
+  "name": "Jugglin",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Jugglin",
+  "difficulty": "medium",
+  "estimatedTime": "3-4 hours",
+  "keyTakeaway": "Container forensics — analyzing Docker images, container layers, and overlay filesystems to investigate containerized application compromises",
+  "tags": ["docker", "containers", "overlay-filesystem", "container-forensics", "linux", "image-layers"],
+  "fundamentals": {
+    "content": "## Container & Docker Forensics\n\n### Why Container Forensics Is Different\n\nContainerized environments present unique forensic challenges:\n- **Ephemeral by design** — containers are meant to be destroyed and recreated\n- **Layered filesystems** — changes are stored in overlay layers, not traditional disk structures\n- **Shared kernel** — containers share the host's kernel, making memory forensics different\n- **Orchestration complexity** — Kubernetes/Docker Compose add management layers\n\n### Docker Image & Container Architecture\n\nA Docker image is composed of **read-only layers**, each representing a filesystem change:\n```\nLayer 4 (top): Application code + config changes\nLayer 3: pip install / npm install (dependencies)\nLayer 2: apt-get install (system packages)\nLayer 1 (base): Ubuntu/Alpine base image\n```\n\nWhen a container runs, Docker adds a **writable layer** on top. All changes (new files, modifications, deletions) go into this writable layer.\n\n### Key Docker Forensic Artifacts\n\n| Artifact | Location | Content |\n|----------|----------|--------|\n| Image layers | `/var/lib/docker/overlay2/` | Read-only filesystem layers |\n| Container layer | `/var/lib/docker/overlay2/<id>/diff/` | Runtime filesystem changes |\n| Container config | `/var/lib/docker/containers/<id>/config.v2.json` | Container configuration, env vars, commands |\n| Docker daemon logs | `/var/log/docker.log` or journalctl | Container lifecycle events |\n| Image manifests | `/var/lib/docker/image/overlay2/` | Image metadata and layer mapping |\n| Volumes | `/var/lib/docker/volumes/` | Persistent data mounted into containers |\n\n### Analyzing Docker Layers\n\nEach layer's `diff/` directory contains only the files changed in that layer:\n- **New files**: Present in the layer's diff\n- **Modified files**: New version in the layer's diff (overrides lower layers)\n- **Deleted files**: Represented by \"whiteout\" files (`.wh.filename`)\n\n### Container Forensic Workflow\n\n1. **Identify running/stopped containers**: `docker ps -a`\n2. **Export container filesystem**: `docker export <id> > container.tar`\n3. **Save image with layers**: `docker save <image> > image.tar`\n4. **Inspect image history**: `docker history <image>` (shows Dockerfile commands)\n5. **Examine the writable layer**: Focus on `/var/lib/docker/overlay2/<id>/diff/`\n6. **Review container logs**: `docker logs <id>`\n\n### What to Look for in Container Investigations\n\n- **Webshells** in the writable layer (attacker dropped files during runtime)\n- **Modified configuration files** (overriding security settings)\n- **Suspicious processes** in container logs\n- **Secrets in environment variables** (database passwords, API keys in config.v2.json)\n- **Reverse shells** or unexpected network listeners",
+    "toolReferences": [
+      {
+        "tool": "Docker CLI",
+        "commands": [
+          "docker save <image> -o image.tar (export image with all layers)",
+          "docker export <container> -o container.tar (export container filesystem)",
+          "docker history <image> --no-trunc (show full Dockerfile commands)",
+          "docker inspect <container> (show container configuration and mounts)",
+          "docker logs <container> (show container stdout/stderr)"
+        ]
+      },
+      {
+        "tool": "dive",
+        "commands": [
+          "dive <image> (interactive layer-by-layer filesystem explorer)",
+          "Each layer shows added, removed, and modified files",
+          "Useful for identifying which layer introduced malicious changes"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Think of Docker images as layered filesystems — each layer is a diff from the previous one. Investigate layer by layer.",
+      "Export the Docker image as a tar and examine the layer directories. Each layer's `diff/` contains only the files that changed.",
+      "Look for the container's writable layer — this is where runtime changes (including attacker modifications) are stored.",
+      "Container configuration files (config.v2.json) often contain sensitive information like environment variables with credentials.",
+      "Use `docker history` or examine the image manifest to reconstruct the Dockerfile and understand what each layer does.",
+      "Whiteout files (`.wh.filename`) indicate file deletions — the attacker may have deleted evidence that the whiteout file reveals."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A containerized application has been compromised. You have access to the Docker host filesystem and need to investigate the container images and running containers to determine how the attacker gained access, what they did, and what data may have been exposed.\n\n**Investigation areas:**\n\n| Area | Location | Purpose |\n|------|----------|--------|\n| Image layers | /var/lib/docker/overlay2/ | Static image content |\n| Container runtime | overlay2/<id>/diff/ | Runtime modifications |\n| Container config | /var/lib/docker/containers/ | Configuration, env vars |\n| Docker logs | /var/log/docker.log | Lifecycle events |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Enumerate containers and images on the Docker host",
+        "command": "docker ps -a && docker images -a",
+        "explanation": "List all containers (running and stopped) and all images. Note container IDs, image names, creation times, and current status. Stopped containers that should be running may indicate a crash after exploitation. Containers with unusual images or names warrant immediate investigation."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Inspect suspicious container configuration",
+        "command": "docker inspect <container_id> OR cat /var/lib/docker/containers/<id>/config.v2.json",
+        "explanation": "The container configuration reveals: command that started the container, environment variables (often containing database passwords, API keys, and secrets), network settings (port mappings, connected networks), volume mounts (access to host filesystem), and the image it was created from. Environment variables are the most immediately valuable for scoping."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Export and analyze the container filesystem",
+        "command": "docker export <container_id> -o container_fs.tar && mkdir container_fs && tar xf container_fs.tar -C container_fs/",
+        "explanation": "Export the container's complete filesystem (merged view of all layers plus runtime changes). Browse the extracted filesystem looking for: webshells in web-accessible directories, modified configuration files, dropped tools or scripts, suspicious cron jobs or startup scripts, and any files created during the compromise."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Examine the container's writable layer for runtime changes",
+        "command": "ls -la /var/lib/docker/overlay2/<container_layer_id>/diff/",
+        "explanation": "The writable layer's `diff/` directory contains ONLY files that changed during the container's runtime — everything else comes from the image layers. This is the most targeted place to look: any files here were created or modified after the container started. Look for webshells, backdoors, modified configs, and attacker tools."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Analyze image layers to understand the base configuration",
+        "command": "docker save <image> -o image.tar && tar xf image.tar && cat manifest.json",
+        "explanation": "Save and extract the image to examine each layer individually. The `manifest.json` maps layer directories to image layers. Examine each layer's `layer.tar` to understand: what the base image provides, what packages were installed, what application code was deployed, and what configuration was set. This establishes the \"known good\" baseline."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Reconstruct the Dockerfile from image history",
+        "command": "docker history <image> --no-trunc --format '{{.CreatedBy}}'",
+        "explanation": "Image history shows the Dockerfile commands that built each layer. This reveals: the base image used, system packages installed, application dependencies, exposed ports, and the startup command. Look for insecure practices: running as root, exposing unnecessary ports, hardcoded credentials in build commands, or using `latest` tags."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Check container logs for application-level evidence",
+        "command": "docker logs <container_id> --timestamps 2>&1 | head -500",
+        "explanation": "Container logs capture stdout/stderr from the application process. Look for: web server access logs showing the exploitation request, error messages from the application during/after compromise, attacker commands if the application echoes input, and any output from tools the attacker ran inside the container."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Examine Docker volumes for persistent data exposure",
+        "command": "ls -la /var/lib/docker/volumes/ && find /var/lib/docker/volumes/ -name '*.sql' -o -name '*.env' -o -name '*.conf'",
+        "explanation": "Docker volumes persist data outside the container lifecycle. They often contain: database files, configuration with credentials, application data, and logs. Even if the container is destroyed, volume data remains. Check for sensitive data exposure and any modifications the attacker made to persistent data."
+      },
+      {
+        "stepNumber": 9,
+        "description": "Look for container escape indicators",
+        "command": "Check for mounted Docker socket, privileged mode, and host path mounts",
+        "explanation": "Determine if the attacker could escape the container: (1) Docker socket mounted (`/var/run/docker.sock`) allows creating new privileged containers, (2) `--privileged` flag gives full host access, (3) Sensitive host paths mounted (like `/etc/`, `/root/`) enable host filesystem access. If any of these conditions exist, the investigation must expand to the host system."
+      },
+      {
+        "stepNumber": 10,
+        "description": "Document the attack chain and container security gaps",
+        "command": "Compile findings into a timeline of container compromise",
+        "explanation": "Final timeline: (1) Application vulnerability exploited (from access logs), (2) Attacker gained code execution inside the container, (3) Post-exploitation activity (from writable layer and logs), (4) Data access or exfiltration (from volume analysis), (5) Potential container escape (from configuration review). Document security gaps: running as root, excessive capabilities, exposed secrets in environment variables, missing network segmentation."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "optinseltrace-4",
+    "nextChallengeId": "shadowroast"
+  }
+}

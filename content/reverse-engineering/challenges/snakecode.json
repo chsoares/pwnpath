@@ -1,0 +1,101 @@
+{
+  "challengeId": "snakecode",
+  "name": "Snakecode",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/Snakecode",
+  "difficulty": "hard",
+  "estimatedTime": "3 - 5 hours",
+  "keyTakeaway": "Python bytecode reversing — decompiling .pyc files, reading Python bytecode with the dis module, and reconstructing obfuscated logic",
+  "tags": ["python", "bytecode", "pyc", "pyinstaller", "decompilation", "obfuscation"],
+  "fundamentals": {
+    "content": "## Python Bytecode Reverse Engineering\n\n### How Python Executables Are Made\n\nPython scripts are normally interpreted, but they can be packaged as standalone executables using tools like:\n\n| Tool | Output | How It Works |\n|------|--------|--------------|\n| **PyInstaller** | Single .exe or directory | Bundles Python interpreter + .pyc files + dependencies |\n| **cx_Freeze** | Directory with .exe | Similar to PyInstaller |\n| **Nuitka** | Native binary | Compiles Python to C then to native code |\n| **py2exe** | Windows .exe | Windows-specific packager |\n\nPyInstaller is the most common. It creates a self-extracting archive that unpacks a Python interpreter and your `.pyc` files at runtime.\n\n### Extracting from PyInstaller Bundles\n\n**Step 1: Identify PyInstaller packaging**\n```bash\nstrings binary | grep -i 'pyinstaller\\|PYZ\\|pyi'\n# Look for: 'PYZ-00.pyz', 'pyiboot', 'MEI' directory references\n```\n\n**Step 2: Extract the archive**\n```bash\npython3 pyinstxtractor.py packed_binary\n# Creates: packed_binary_extracted/ directory\n# Key files: your_script.pyc, PYZ-00.pyz (dependencies)\n```\n\n**Step 3: Fix .pyc headers**\n\nExtracted `.pyc` files may have truncated headers. A valid `.pyc` header contains:\n- **Magic number** (2 bytes): Identifies Python version\n- **Flags** (4 bytes): Bit field\n- **Timestamp** (4 bytes): Source modification time\n- **Size** (4 bytes): Source file size\n\nIf the header is truncated, prepend the correct bytes for the Python version used.\n\n### Python Bytecode Fundamentals\n\nPython compiles source code to **bytecode** — a set of instructions for the Python Virtual Machine (PVM). The `dis` module disassembles bytecode:\n\n```python\nimport dis\nimport marshal\n\nwith open('script.pyc', 'rb') as f:\n    f.read(16)  # Skip header (Python 3.8+)\n    code = marshal.load(f)\n    dis.dis(code)\n```\n\n### Reading Bytecode Output\n\n```\n  2           0 LOAD_CONST               1 ('HTB{')\n              2 STORE_FAST               0 (flag)\n  3           4 LOAD_FAST                0 (flag)\n              6 LOAD_CONST               2 ('s3cr3t')\n              8 BINARY_ADD\n             10 STORE_FAST               0 (flag)\n```\n\nKey bytecode instructions:\n\n| Instruction | Meaning |\n|-------------|--------|\n| `LOAD_CONST n` | Push constant at index n onto stack |\n| `LOAD_FAST n` | Push local variable n onto stack |\n| `STORE_FAST n` | Pop stack into local variable n |\n| `BINARY_ADD` | Pop two values, push their sum (or string concatenation) |\n| `COMPARE_OP n` | Pop two values, push comparison result (n: 0==, 1!=, 2<, etc.) |\n| `POP_JUMP_IF_FALSE addr` | Pop stack, jump to addr if falsy |\n| `CALL_FUNCTION n` | Call function with n arguments from stack |\n| `BUILD_LIST n` | Build a list from n stack items |\n| `BINARY_XOR` | Pop two values, push XOR result |\n\n### Decompilation Tools\n\n| Tool | Python Versions | Notes |\n|------|----------------|-------|\n| **uncompyle6** | 2.6 - 3.8 | Most reliable for older versions |\n| **decompyle3** | 3.7 - 3.8 | Fork of uncompyle6 |\n| **pycdc** | All versions | C++ based, handles newer versions |\n| **pylingual.io** | All versions | Online decompiler |\n\nWhen decompilers fail (obfuscated bytecode, unsupported version), you must read the raw bytecode using `dis` and manually reconstruct the logic.\n\n### Obfuscation Techniques in Python\n\n- **Code object replacement:** Modifying bytecode directly to break decompilers\n- **Lambda chains:** Nested lambda expressions that are hard to read\n- **exec/eval with encoded strings:** `exec(base64.b64decode('...'))`\n- **Custom opcodes:** Replacing standard bytecode with custom instructions (rare, advanced)",
+    "toolReferences": [
+      {
+        "tool": "pyinstxtractor",
+        "commands": [
+          "python3 pyinstxtractor.py binary — extract PyInstaller archive",
+          "ls binary_extracted/ — browse extracted files",
+          "file binary_extracted/*.pyc — identify Python version from magic number"
+        ]
+      },
+      {
+        "tool": "uncompyle6 / pycdc",
+        "commands": [
+          "uncompyle6 script.pyc — decompile to Python source",
+          "pycdc script.pyc — decompile (supports newer Python versions)",
+          "uncompyle6 -o output_dir/ *.pyc — batch decompile all .pyc files"
+        ]
+      },
+      {
+        "tool": "Python dis module",
+        "commands": [
+          "python3 -m dis script.py — disassemble a Python source file",
+          "import dis, marshal; f=open('x.pyc','rb'); f.read(16); dis.dis(marshal.load(f)) — disassemble .pyc",
+          "dis.dis(code_object) — disassemble a specific code object"
+        ]
+      },
+      {
+        "tool": "strings / xxd",
+        "commands": [
+          "strings binary | grep -i pyinstaller — detect PyInstaller packaging",
+          "xxd script.pyc | head -5 — check .pyc magic number and header"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Check if the binary is a PyInstaller bundle. Run `strings` and look for `PYZ`, `pyiboot`, or `MEI` references.",
+      "Use `pyinstxtractor.py` to extract the archive contents. The main script will be a `.pyc` file.",
+      "Try decompiling with `uncompyle6` or `pycdc` first. If the decompiler fails or produces incorrect output, fall back to reading raw bytecode.",
+      "If the .pyc header is truncated (common with PyInstaller extraction), you need to prepend the correct magic number for the Python version.",
+      "For obfuscated bytecode, use `dis.dis()` to read the raw instructions. Focus on `LOAD_CONST`, `BINARY_XOR`, and `COMPARE_OP` to understand the flag validation logic.",
+      "The flag might be constructed through string concatenation, XOR operations, or decoded from base64. Trace the bytecode operations to reconstruct it."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A packed Python executable contains obfuscated logic that validates or generates a flag. You need to unpack it, decompile or disassemble the Python bytecode, and reconstruct the flag.\n\n**Approach:** Extract the PyInstaller bundle, decompile the .pyc files, and analyze the Python logic to find the flag.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify the packaging method",
+        "command": "strings ./snakecode | grep -i 'pyz\\|pyinstaller\\|pyi'",
+        "explanation": "Search for PyInstaller signatures in the binary. The presence of strings like `PYZ-00.pyz`, `pyimod`, or `MEIPASS` confirms PyInstaller packaging. This tells you the binary contains an embedded Python interpreter and .pyc files that can be extracted."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Extract the PyInstaller archive",
+        "command": "python3 pyinstxtractor.py ./snakecode",
+        "explanation": "Run `pyinstxtractor` to unpack the archive. This creates a directory containing: the main script as a `.pyc` file, `PYZ-00.pyz` (a ZIP of dependencies), the Python runtime libraries, and metadata. The main script .pyc file is your primary analysis target."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Fix the .pyc header if needed",
+        "command": "python3 -c \"import struct; magic = b'\\x55\\x0d\\x0d\\x0a'; header = magic + b'\\x00'*12; data = open('script.pyc','rb').read(); open('fixed.pyc','wb').write(header + data)\"",
+        "explanation": "PyInstaller often strips the .pyc header during packaging. Check the first few bytes with `xxd`. If the magic number is missing, prepend the correct header for the Python version (identifiable from the extracted `python3X.dll` or `libpythonX.Y.so`). Python 3.8+ uses a 16-byte header."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Attempt decompilation",
+        "command": "uncompyle6 fixed.pyc || pycdc fixed.pyc",
+        "explanation": "Try decompiling with `uncompyle6` first (best for Python <= 3.8), then `pycdc` (supports newer versions). If decompilation succeeds, you get readable Python source code. If it fails or produces partial/incorrect output, you'll need to read the raw bytecode."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Analyze the Python logic or bytecode",
+        "command": "python3 -c \"import dis, marshal; f=open('fixed.pyc','rb'); f.read(16); dis.dis(marshal.load(f))\"",
+        "explanation": "If decompilation failed, use the `dis` module to read raw bytecode. Trace the instructions to understand the flag validation or generation logic. Look for: string constants being loaded (`LOAD_CONST`), XOR or other transformations (`BINARY_XOR`), and comparison operations. Reconstruct the high-level logic from the sequence of bytecode instructions."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Reconstruct and extract the flag",
+        "command": "python3 solve.py",
+        "explanation": "Based on the decompiled source or bytecode analysis, write a Python script that reproduces the flag generation logic. This might involve: decoding base64 strings, applying XOR operations with extracted keys, reversing string transformations, or simply reading the constants from the code. Run the script to produce the flag in HTB{...} format."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "bombs-landed",
+    "nextChallengeId": null
+  }
+}

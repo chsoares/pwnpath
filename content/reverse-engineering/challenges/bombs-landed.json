@@ -1,0 +1,92 @@
+{
+  "challengeId": "bombs-landed",
+  "name": "Bombs Landed",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/Bombs%20Landed",
+  "difficulty": "hard",
+  "estimatedTime": "3 - 5 hours",
+  "keyTakeaway": "Multi-phase binary bomb — solving sequential puzzle phases that test assembly reading, algorithmic thinking, and debugging precision",
+  "tags": ["elf", "ghidra", "gdb", "binary-bomb", "phases", "assembly", "algorithms"],
+  "fundamentals": {
+    "content": "## Binary Bombs: Multi-Phase Reversing Challenges\n\n### The Binary Bomb Concept\n\nA binary bomb is a program with multiple \"phases,\" each requiring a specific input to defuse. If you enter the wrong input, the bomb \"explodes\" (prints a failure message or exits). Each phase tests a different reversing skill:\n\n| Phase Type | Skill Tested |\n|------------|-------------|\n| String comparison | Basic static analysis |\n| Numeric sequence | Loop analysis, arithmetic |\n| Linked list / sorting | Data structure recognition |\n| Recursive function | Call stack analysis |\n| Switch/jump table | Control flow analysis |\n| Register manipulation | Dynamic analysis with GDB |\n\n### Strategy for Binary Bombs\n\n**Step 1: Identify the Phase Structure**\n\nThe main function typically looks like:\n```c\nread_input(input);\nphase_1(input);   // Solve each phase sequentially\nread_input(input);\nphase_2(input);\n// ... more phases\n```\n\n**Step 2: Find the Explode Function**\n\nLocate the `explode_bomb` or failure function and set a breakpoint on it. This is your safety net — if you enter wrong input, GDB catches it before the bomb \"detonates\":\n\n```\n(gdb) b explode_bomb\n```\n\n**Step 3: Solve One Phase at a Time**\n\nFor each phase:\n1. Decompile the phase function in Ghidra\n2. Understand what input it expects\n3. Set breakpoints in GDB at key comparison points\n4. Test your solution\n5. Once solved, pipe known answers from a file for previous phases\n\n### Advanced Assembly Patterns\n\n**Switch Statements (Jump Tables):**\n```asm\nmov eax, [input]\ncmp eax, 6          ; Check if input > 6\nja default_case\njmp [jump_table + eax*8]  ; Index into jump table\n```\n\n**Recursive Functions:**\n```asm\nfunc:\n    cmp edi, 1\n    jle base_case\n    push rbx\n    mov ebx, edi\n    lea edi, [rbx-1]\n    call func          ; Recursive call with n-1\n    lea edi, [rbx-2]\n    call func          ; Recursive call with n-2\n    ; This is Fibonacci!\n```\n\n**Linked List Traversal:**\n```asm\n    mov rax, [head]     ; Start at head node\nloop:\n    cmp [rax], target   ; Check node value\n    je found\n    mov rax, [rax+8]    ; Follow next pointer\n    test rax, rax       ; Check for NULL\n    jnz loop\n```\n\n### Using GDB Efficiently for Bombs\n\n```bash\n# Save solved answers in a file\necho -e \"answer1\\nanswer2\\nanswer3\" > answers.txt\n\n# Run with answers piped in\ngdb ./bomb\n(gdb) b phase_4\n(gdb) r < answers.txt\n# GDB breaks at phase_4 — previous phases already solved\n```",
+    "toolReferences": [
+      {
+        "tool": "GDB",
+        "commands": [
+          "b explode_bomb — safety breakpoint to catch wrong answers",
+          "b phase_N — break at the start of phase N",
+          "r < answers.txt — run with previously solved answers from file",
+          "x/10d $rsp — examine stack as decimal values (useful for numeric phases)",
+          "p (int)$rax — print register as signed integer",
+          "info frame — show current stack frame details",
+          "bt — backtrace to see call hierarchy"
+        ]
+      },
+      {
+        "tool": "Ghidra",
+        "commands": [
+          "Search for 'explode' or 'boom' strings — find the failure function",
+          "Right-click phase function → Function Call Trees — see internal structure",
+          "Window → Function Graph — visualize branches in each phase",
+          "Right-click → Retype variable as int/char/struct — improve decompiler output"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start by finding the `explode_bomb` or equivalent failure function. Set a GDB breakpoint there as a safety net.",
+      "Phase 1 is usually a string comparison. Use `strings` or Ghidra's Defined Strings to find the expected string.",
+      "For numeric phases, look at what comparisons are made. The decompiler shows the expected values or the formula used to validate them.",
+      "If a phase involves a loop, trace it carefully. Count iterations and track how the loop variable changes the validation condition.",
+      "For recursive phases, draw out the call tree on paper. Base cases tell you the terminal values; recursive cases show how values combine.",
+      "Save your solved answers in a text file and pipe them to the program with `r < answers.txt` in GDB. This lets you skip to unsolved phases quickly.",
+      "Some phases validate a sequence of numbers. Use GDB to inspect the comparison values dynamically if the static analysis is ambiguous."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A binary bomb with multiple phases. Each phase requires specific input to defuse. Wrong input triggers an explosion. You must reverse engineer each phase's logic to determine the correct input.\n\n**Approach:** Combine Ghidra static analysis with GDB dynamic analysis. Solve phases sequentially, saving answers to a file for efficient re-runs.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Set up the debugging environment",
+        "command": "gdb ./bomb → b explode_bomb → b phase_1",
+        "explanation": "Load the bomb in GDB. Set a breakpoint on the explosion/failure function as a safety net. Then set a breakpoint on `phase_1` to begin analysis. The safety breakpoint ensures that if you provide wrong input, the bomb is caught before it 'detonates'."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Solve Phase 1: String comparison",
+        "command": "Ghidra: Decompile phase_1 → find the strcmp argument",
+        "explanation": "Phase 1 typically compares your input against a hardcoded string using `strings_not_equal` or `strcmp`. Decompile the function in Ghidra to find the expected string in .rodata. Alternatively, use GDB: break at the comparison and examine the arguments (`x/s $rsi`). Enter the correct string to pass phase 1."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Solve Phase 2: Numeric sequence",
+        "command": "Ghidra: Decompile phase_2 → identify the sequence pattern",
+        "explanation": "Phase 2 often reads a series of numbers and validates them against a mathematical pattern (powers of 2, Fibonacci, arithmetic sequence, etc.). The decompiled code shows a loop that checks each number against a computed expected value. Trace the loop to determine the pattern and compute the correct sequence."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Solve Phase 3: Switch/jump table",
+        "command": "Ghidra: Decompile phase_3 → map the switch cases",
+        "explanation": "Phase 3 typically uses a switch statement. The first input selects a case, and subsequent inputs must match values defined in that case. In Ghidra, the decompiler shows the switch structure. Choose any valid case number and read the expected values for that case."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Solve Phase 4: Recursive function",
+        "command": "Ghidra: Decompile phase_4 → understand the recursive logic",
+        "explanation": "Phase 4 usually calls a recursive function and checks its return value. Decompile the recursive function to understand its base case and recursive case. This is often a variation of Fibonacci, factorial, or a custom recursive computation. Determine which input value produces the expected return value, either by reimplementing in Python or by tracing with GDB."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Solve remaining phases with combined analysis",
+        "command": "Save answers: echo -e 'ans1\\nans2\\n...' > answers.txt → gdb ./bomb → r < answers.txt",
+        "explanation": "For each remaining phase, combine Ghidra's decompiler output with GDB breakpoints. Save all solved answers to a file and pipe them to the binary so you can jump directly to unsolved phases. Later phases may involve data structure operations (linked lists, trees), bit manipulation, or multi-variable systems of equations. The flag is typically obtained by solving all phases or is revealed upon successful completion."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "debugme",
+    "nextChallengeId": "snakecode"
+  }
+}

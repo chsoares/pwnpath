@@ -1,0 +1,99 @@
+{
+  "challengeId": "keepass",
+  "name": "KeePass",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/KeePass",
+  "difficulty": "easy",
+  "estimatedTime": "1-2 hours",
+  "keyTakeaway": "Password manager forensics — extracting and analyzing KeePass database artifacts, memory dumps for master keys, and credential recovery",
+  "tags": ["keepass", "password-manager", "credential-recovery", "memory-analysis", "cve-2023-32784"],
+  "fundamentals": {
+    "content": "## KeePass Database Forensics\n\n### Why Password Managers Are Forensic Goldmines\n\nPassword managers store all of a user's credentials in a single encrypted database. From a forensic perspective, this makes them extremely high-value targets for both attackers and investigators:\n- **For attackers**: Compromising the master password or database gives access to every stored credential\n- **For investigators**: Recovering the database reveals the full scope of accounts an employee had access to\n\n### KeePass Database Structure\n\nKeePass uses `.kdbx` files (KeePass 2.x) encrypted with:\n- **Master password** — user-provided passphrase\n- **Key file** — optional file-based second factor\n- **Windows user account** — optional DPAPI-based protection\n\nThe database contains entries organized in groups, each with:\n- Title, username, password, URL\n- Notes, attachments, custom fields\n- Creation, modification, and access timestamps\n\n### CVE-2023-32784: KeePass Memory Extraction\n\nA critical vulnerability in KeePass 2.x (before 2.54) allows extraction of the master password from process memory:\n- KeePass stores password characters in a .NET `SecureString`, but intermediate processing leaves characters in memory\n- A memory dump of the KeePass process (or the full system) can be searched for these residual characters\n- The tool `keepass-password-dumper` can reconstruct most of the master password from a memory dump\n- Only the first character is typically missing — the rest can be recovered\n\n### Forensic Artifacts Related to KeePass\n\n| Artifact | Location | Details |\n|----------|----------|--------|\n| Database file | User-chosen location | `.kdbx` file (encrypted) |\n| Configuration | `%APPDATA%\\KeePass\\KeePass.config.xml` | Recent databases, settings |\n| Prefetch | `C:\\Windows\\Prefetch\\KEEPASS.EXE-*.pf` | Execution evidence |\n| Memory dump | Process or system memory | May contain master password |\n| LNK files | Recent folder | Evidence of database file access |",
+    "toolReferences": [
+      {
+        "tool": "keepass-password-dumper",
+        "commands": [
+          "dotnet run -- /path/to/memory.dmp (extract master password from memory dump)",
+          "The tool outputs candidate characters for each position in the password",
+          "First character is typically missing — try common characters"
+        ]
+      },
+      {
+        "tool": "kpcli",
+        "commands": [
+          "kpcli --kdb database.kdbx (open KeePass database from command line)",
+          "ls (list groups and entries)",
+          "show <entry> (display credentials for an entry)",
+          "find <term> (search entries)"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "You're likely provided with a KeePass database file (.kdbx) and a memory dump. The goal is to recover the master password from memory.",
+      "CVE-2023-32784 is key here — KeePass versions before 2.54 leak the master password in process memory.",
+      "Use keepass-password-dumper or search the memory dump manually for password character patterns.",
+      "The first character of the master password is usually not recoverable from the memory dump — you may need to guess or brute-force it.",
+      "Once you have the master password, open the database with kpcli or KeePass to examine stored credentials.",
+      "Look at the KeePass configuration file for additional context about when the database was last accessed and from where."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A KeePass database and associated memory dump have been recovered from a compromised system. The database is encrypted, but the running KeePass process was captured in memory. Your goal is to recover the master password, access the database, and extract the stored credentials.\n\n**Key evidence:**\n\n| File | Purpose |\n|------|--------|\n| database.kdbx | Encrypted KeePass database |\n| memory.dmp | Process/system memory dump |\n| KeePass.config.xml | Configuration with recent database paths |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify the KeePass version from the database or config",
+        "command": "strings memory.dmp | grep -i 'keepass' | head -20",
+        "explanation": "First, determine the KeePass version. Versions before 2.54 are vulnerable to CVE-2023-32784, which allows master password extraction from memory. Check the memory dump for version strings, or examine the KeePass configuration file if available."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Extract the master password from the memory dump",
+        "command": "dotnet run -- /path/to/memory.dmp",
+        "explanation": "Run `keepass-password-dumper` against the memory dump. The tool exploits CVE-2023-32784 by searching for the residual character patterns left by KeePass's text box processing. It outputs candidate characters for each position in the password. The first character is typically not recoverable (shown as a wildcard)."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Reconstruct the complete master password",
+        "command": "Analyze the dumper output and test candidate passwords",
+        "explanation": "The tool provides most of the password with the first character missing. Try common first characters (lowercase letters, uppercase letters, special characters) until the database opens. The password is often a recognizable word or phrase, so partial recovery usually makes the missing character obvious."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Open the KeePass database with the recovered password",
+        "command": "kpcli --kdb database.kdbx",
+        "explanation": "Enter the recovered master password when prompted. Once open, use `ls` to list all groups (folders) and `show <entry_number>` to display individual credentials. Document every entry — the stored credentials represent the full scope of the user's access."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Enumerate all stored credentials",
+        "command": "kpcli: ls -R (recursive listing of all groups and entries)",
+        "explanation": "Recursively list all entries in the database. For each entry, record: the title (what service it's for), the username, the URL, and any notes. Pay special attention to entries for: domain admin accounts, VPN credentials, cloud service accounts, and infrastructure passwords — these indicate what the attacker could access if they also compromised this database."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Extract and analyze attachments",
+        "command": "kpcli: show -a <entry> (show entry with attachments)",
+        "explanation": "KeePass entries can contain file attachments — often SSH keys, certificates, or configuration files. Export any attachments and analyze them. These could contain additional credentials or access tokens not visible in the standard password fields."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Review entry timestamps for access patterns",
+        "command": "Examine LastModificationTime and CreationTime for each entry",
+        "explanation": "Each KeePass entry has creation and modification timestamps. Recently modified entries may indicate credentials the user (or attacker) changed. Recently created entries could be new accounts provisioned. These timestamps help establish a timeline of credential management activity."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Correlate findings with the broader investigation",
+        "command": "Cross-reference stored credentials with compromise evidence",
+        "explanation": "Map the recovered credentials to the broader incident: (1) Were any of these credentials used in the attack? (2) Do the stored URLs match compromised services? (3) Are there credentials for lateral movement targets? (4) Does the database contain credentials for the attacker's infrastructure (indicating the database belongs to the attacker)? This context is critical for incident scoping."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "lockpick2-0",
+    "nextChallengeId": "optinseltrace-2"
+  }
+}

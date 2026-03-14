@@ -1,0 +1,133 @@
+{
+  "categoryId": "reverse-engineering",
+  "challenges": [
+    {
+      "position": 1,
+      "challengeId": "behind-the-scenes",
+      "name": "Behind the Scenes",
+      "difficulty": "very_easy",
+      "estimatedTime": "30 min - 1 hour",
+      "keyTakeaway": "Binary triage fundamentals — using file, strings, and ltrace to extract hidden information from ELF binaries without a disassembler"
+    },
+    {
+      "position": 2,
+      "challengeId": "dvho",
+      "name": "DVHO",
+      "difficulty": "very_easy",
+      "estimatedTime": "30 min - 1 hour",
+      "keyTakeaway": "Simple conditional check reversing — reading decompiled code to understand password validation logic and bypass it"
+    },
+    {
+      "position": 3,
+      "challengeId": "shattered-tablet",
+      "name": "Shattered Tablet",
+      "difficulty": "very_easy",
+      "estimatedTime": "30 min - 1 hour",
+      "keyTakeaway": "String comparison reversing — identifying hardcoded flag checks through static analysis of comparison functions"
+    },
+    {
+      "position": 4,
+      "challengeId": "simple-encryptor",
+      "name": "Simple Encryptor",
+      "difficulty": "very_easy",
+      "estimatedTime": "30 min - 1 hour",
+      "keyTakeaway": "Algorithm reversal methodology — reading XOR and bit rotation operations in decompiled C code and reversing them in the correct order with a Python solver script"
+    },
+    {
+      "position": 5,
+      "challengeId": "hunting",
+      "name": "Hunting",
+      "difficulty": "easy",
+      "estimatedTime": "1 - 2 hours",
+      "keyTakeaway": "Windows PE reversing — analyzing a .exe in Ghidra, understanding PE structure, and tracing flag construction across functions"
+    },
+    {
+      "position": 6,
+      "challengeId": "impossible-password",
+      "name": "Impossible Password",
+      "difficulty": "easy",
+      "estimatedTime": "1 - 2 hours",
+      "keyTakeaway": "Anti-debugging and string obfuscation — defeating runtime-generated strings by patching or using GDB to bypass checks"
+    },
+    {
+      "position": 7,
+      "challengeId": "bypass",
+      "name": "Bypass",
+      "difficulty": "easy",
+      "estimatedTime": "1 - 2 hours",
+      "keyTakeaway": "Authentication bypass — patching conditional jumps to skip password checks and understanding how branch instructions control program flow"
+    },
+    {
+      "position": 8,
+      "challengeId": "exatlon",
+      "name": "Exatlon",
+      "difficulty": "easy",
+      "estimatedTime": "1 - 2 hours",
+      "keyTakeaway": "Binary packing concepts — detecting UPX-packed binaries through entropy and signature analysis, unpacking with upx -d, and reversing the underlying encryption scheme"
+    },
+    {
+      "position": 9,
+      "challengeId": "rebuilding",
+      "name": "Rebuilding",
+      "difficulty": "easy",
+      "estimatedTime": "1 - 2 hours",
+      "keyTakeaway": "Algorithm reconstruction — translating assembly-level loops and arithmetic into a high-level algorithm to reproduce the flag"
+    },
+    {
+      "position": 10,
+      "challengeId": "ouija",
+      "name": "Ouija",
+      "difficulty": "medium",
+      "estimatedTime": "2 - 3 hours",
+      "keyTakeaway": "Multi-function analysis — tracing data flow across multiple functions and understanding complex control flow in decompiled output"
+    },
+    {
+      "position": 11,
+      "challengeId": "ghostintheshellcode",
+      "name": "GhostInTheShelcode",
+      "difficulty": "medium",
+      "estimatedTime": "2 - 3 hours",
+      "keyTakeaway": "Shellcode analysis — decoding and disassembling raw shellcode payloads to understand their behavior and extract embedded data"
+    },
+    {
+      "position": 12,
+      "challengeId": "tear-or-dear",
+      "name": "Tear Or Dear",
+      "difficulty": "medium",
+      "estimatedTime": "2 - 3 hours",
+      "keyTakeaway": ".NET reversing fundamentals — understanding why managed code decompiles almost perfectly and using DNSpy/ILSpy to recover near-original source code from .NET assemblies"
+    },
+    {
+      "position": 13,
+      "challengeId": "lootstash",
+      "name": "LootStash",
+      "difficulty": "medium",
+      "estimatedTime": "2 - 4 hours",
+      "keyTakeaway": "Encryption algorithm reversing — identifying and reimplementing custom or standard cryptographic routines found in compiled code"
+    },
+    {
+      "position": 14,
+      "challengeId": "debugme",
+      "name": "DebugMe",
+      "difficulty": "medium",
+      "estimatedTime": "2 - 4 hours",
+      "keyTakeaway": "Anti-debugging bypass techniques — identifying and defeating ptrace detection, timing checks, and self-modifying code (XOR unpacking) that protect a binary from analysis"
+    },
+    {
+      "position": 15,
+      "challengeId": "bombs-landed",
+      "name": "Bombs Landed",
+      "difficulty": "hard",
+      "estimatedTime": "3 - 5 hours",
+      "keyTakeaway": "Multi-phase binary bomb — solving sequential puzzle phases that test assembly reading, algorithmic thinking, and debugging precision"
+    },
+    {
+      "position": 16,
+      "challengeId": "snakecode",
+      "name": "Snakecode",
+      "difficulty": "hard",
+      "estimatedTime": "3 - 5 hours",
+      "keyTakeaway": "Python bytecode reversing — decompiling .pyc files, reading Python bytecode with the dis module, and reconstructing obfuscated logic"
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "challengeId": "exatlon",
+  "name": "Exatlon",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/Exatlon",
+  "difficulty": "easy",
+  "estimatedTime": "1 - 2 hours",
+  "keyTakeaway": "Binary packing concepts — detecting UPX-packed binaries through entropy and signature analysis, unpacking with upx -d, and reversing the underlying encryption scheme",
+  "tags": ["upx", "packing", "unpacking", "entropy", "obfuscation", "ghidra"],
+  "fundamentals": {
+    "content": "## Binary Packing and UPX\n\n### What Is Binary Packing?\n\nPacking is a technique that compresses or encrypts an executable's code and data, wrapping it in a small unpacking stub. When the packed binary runs, the stub decompresses the original code into memory and transfers execution to it. The on-disk binary looks nothing like the original.\n\nPacking serves several purposes:\n- **Size reduction** — the original motivation for tools like UPX\n- **Anti-analysis** — packed binaries reveal very few strings and functions to static analysis tools\n- **Malware evasion** — packed payloads bypass simple signature-based detection\n\n### How to Detect Packed Binaries\n\nSeveral indicators suggest a binary is packed:\n\n**1. High Entropy:**\nCompressed/encrypted data has near-random byte distribution (entropy close to 8.0 bits/byte). Normal code has entropy around 5-6.\n\n```bash\n# Check entropy with binwalk\nbinwalk -E binary\n\n# Or with rabin2\nrabin2 -S binary  # Check section entropy values\n```\n\n**2. Few or No Meaningful Strings:**\n```bash\nstrings binary | wc -l  # Packed: very few strings\n# Compare with a normal binary of similar size\n```\n\n**3. UPX Signatures:**\nUPX leaves identifiable section names:\n```bash\nreadelf -S binary | grep -i upx\n# UPX sections: UPX0, UPX1, UPX!\n```\n\n**4. Small Import Table:**\nPacked binaries import very few functions (just enough for the unpacking stub). A normal binary importing only `mmap`, `mprotect`, and a few others is suspicious.\n\n**5. Entry Point Location:**\nIf the entry point is in a section other than `.text` (like `UPX1`), the binary is likely packed.\n\n### UPX: The Universal Packer/Unpacker\n\nUPX (Ultimate Packer for eXecutables) is the most common open-source packer. It supports ELF, PE, and other formats.\n\n**Unpacking is trivial when UPX headers are intact:**\n```bash\nupx -d packed_binary -o unpacked_binary\n```\n\nSome challenge authors or malware developers modify UPX headers to break the `upx -d` command. In that case, you can:\n1. Fix the corrupted headers (restore `UPX!` magic bytes)\n2. Manually dump the unpacked binary from memory at runtime\n3. Use tools like `upx-recovery-tool` to repair the headers\n\n### After Unpacking: The Real Analysis Begins\n\nUnpacking reveals the original binary with all its strings, functions, and logic intact. This is where standard reverse engineering techniques apply:\n\n1. Run `strings` on the unpacked binary — you'll see dramatically more output\n2. Load in Ghidra — functions and cross-references are now visible\n3. The challenge's actual logic (encryption, validation, etc.) can now be analyzed normally\n\n### Why This Matters for Real-World Analysis\n\nMalware frequently uses packing:\n- **Commercial packers** like Themida, VMProtect, ASPack make unpacking much harder\n- **Custom packers** require manual unpacking through debugging\n- **Multi-layer packing** applies packers on top of each other\n\nUPX is the simplest case — real malware analysis often requires dump-from-memory techniques when automated unpacking fails. Understanding UPX builds the foundation for handling more complex packers.",
+    "toolReferences": [
+      {
+        "tool": "UPX",
+        "commands": [
+          "upx -d packed_binary -o unpacked_binary — decompress a UPX-packed binary",
+          "upx -t binary — test if a binary is UPX-packed",
+          "upx -l binary — list UPX packing details (compression ratio, format)"
+        ]
+      },
+      {
+        "tool": "Detection tools",
+        "commands": [
+          "readelf -S binary | grep -i upx — check for UPX section names",
+          "binwalk -E binary — plot entropy graph (high entropy = packed/encrypted)",
+          "strings binary | wc -l — low string count suggests packing",
+          "rabin2 -I binary — show binary info including detected packer"
+        ]
+      },
+      {
+        "tool": "Ghidra",
+        "commands": [
+          "Import unpacked binary → Analyze — full static analysis after unpacking",
+          "Window → Defined Strings — compare string count before/after unpacking",
+          "Navigate to main() — the actual challenge logic is now visible"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Run `strings` on the binary. If you see very few meaningful strings and references to UPX, the binary is packed.",
+      "Check for UPX section names with `readelf -S`. Look for sections named UPX0, UPX1, or UPX!.",
+      "Unpack the binary with `upx -d`. This produces a clean binary you can analyze normally.",
+      "After unpacking, load the binary in Ghidra. Now you can see all the functions and strings that were hidden.",
+      "The unpacked binary contains a validation routine that checks your input. Reverse the validation algorithm to determine the expected input.",
+      "Look for an array of expected values that your (transformed) input is compared against. Reverse the transformation to find the original input."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** You are given a binary that prompts for a password. The binary is packed with UPX, hiding its internal logic. You need to unpack it, reverse the validation algorithm, and determine the correct password (which is the flag).\n\n**Approach:** Detect and remove UPX packing, then analyze the unpacked binary's validation logic in Ghidra to extract or compute the expected input.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify that the binary is packed",
+        "command": "file exatlon && strings exatlon | wc -l && readelf -S exatlon | grep -i upx",
+        "explanation": "The `file` command shows it's an ELF executable. Running `strings` reveals very few meaningful strings — far fewer than expected for a binary of this size. The `readelf` output shows sections named UPX0 and UPX1, confirming UPX packing. These are the hallmarks: low strings count + UPX section names."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Unpack the binary with UPX",
+        "command": "upx -d exatlon -o exatlon_unpacked",
+        "explanation": "UPX decompresses the binary, producing an unpacked version. The output shows the compression ratio (how much smaller the packed version was). Now running `strings exatlon_unpacked | wc -l` shows significantly more strings, confirming successful unpacking."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Load the unpacked binary in Ghidra",
+        "command": "Ghidra: Import exatlon_unpacked → Analyze → Navigate to main()",
+        "explanation": "With the unpacked binary, Ghidra can identify all functions and strings. Navigate to `main()` — it shows the program prompting for input and then calling a validation function. The validation function transforms the input and compares it against expected values."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Analyze the validation algorithm",
+        "command": "Ghidra: Decompile the validation function → trace the transformation",
+        "explanation": "The validation function applies a transformation to each character of the input (such as multiplying by a constant, performing arithmetic shifts, or a custom encoding scheme). The transformed input is then compared against a hardcoded array of expected values. Document the exact transformation applied to each character."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Reverse the transformation to find the flag",
+        "command": "python3 -c \"expected = [...]; print(''.join(chr(reverse_transform(v)) for v in expected))\"",
+        "explanation": "Write a Python script that takes the expected output values and applies the inverse transformation. For example, if the forward transformation multiplies each ASCII value by a constant, the reverse divides by that constant. If it applies a custom formula, invert each step. The result is the original input string — the flag in HTB{...} format."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Verify by running the unpacked binary",
+        "command": "./exatlon_unpacked",
+        "explanation": "Run the unpacked binary and enter the recovered flag as the password. The program validates the input and confirms it is correct. This challenge demonstrates a realistic analysis workflow: detect packing → unpack → analyze the real logic. In malware analysis, this same pattern applies — you must get past the packer before you can understand what the malware actually does."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "bypass",
+    "nextChallengeId": "rebuilding"
+  }
+}

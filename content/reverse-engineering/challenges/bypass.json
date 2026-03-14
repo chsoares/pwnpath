@@ -1,0 +1,88 @@
+{
+  "challengeId": "bypass",
+  "name": "Bypass",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/Bypass",
+  "difficulty": "easy",
+  "estimatedTime": "1 - 2 hours",
+  "keyTakeaway": "Authentication bypass — patching conditional jumps to skip password checks and understanding how branch instructions control program flow",
+  "tags": ["elf", "patching", "conditional-jump", "ghidra", "gdb", "nop"],
+  "fundamentals": {
+    "content": "## Patching Authentication Logic\n\n### The Anatomy of an Authentication Check\n\nMost binary authentication follows this pseudocode:\n\n```c\nchar *password = get_input();\nint result = check_password(password);\nif (result == 0) {\n    access_denied();\n} else {\n    access_granted();  // Flag is here\n}\n```\n\nIn assembly, this becomes:\n\n```asm\ncall check_password\ntest eax, eax        ; Check if return value is 0\nje access_denied     ; Jump to denied if zero\n; ... access_granted code ...\n```\n\n### Patching Strategies\n\nThere are several ways to bypass this check:\n\n**1. Invert the conditional jump:**\nChange `je` (jump if equal/zero) to `jne` (jump if not equal). Now wrong passwords succeed and right passwords fail:\n- `je` = opcode `0x74` → change to `jne` = opcode `0x75`\n\n**2. NOP out the jump:**\nReplace the jump instruction with NOP (no operation) bytes. Execution falls through to the success path:\n- `je <offset>` = `0x74 XX` → `nop nop` = `0x90 0x90`\n\n**3. Force the return value:**\nPatch `check_password` to always return 1 (success):\n- Add `mov eax, 1; ret` at the start of the function\n\n**4. Redirect the jump:**\nChange the jump target to point at the success code instead of the failure code.\n\n### Understanding Function Return Values\n\nIn x86-64, functions return values in the `RAX` register (or `EAX` for 32-bit values). A common convention:\n- Return `0` = failure / false\n- Return `1` (or non-zero) = success / true\n\nThe `test eax, eax` instruction sets the Zero Flag if `eax` is 0. Then:\n- `je` jumps if ZF=1 (eax was 0 → failure)\n- `jne` jumps if ZF=0 (eax was non-zero → success)\n\n### Binary Patching Ethics\n\nIn CTF contexts, patching is a legitimate technique. In real-world scenarios, patching binaries you don't own may violate terms of service or laws. The skill transfers to:\n- **Malware analysis:** Patching anti-analysis checks to enable debugging\n- **Vulnerability research:** Bypassing checks to reach deeper code paths\n- **Game hacking:** Understanding why client-side validation is insufficient",
+    "toolReferences": [
+      {
+        "tool": "Ghidra",
+        "commands": [
+          "Right-click → Patch Instruction — change opcode in the listing view",
+          "File → Export Program → select Binary format — save patched binary",
+          "Ctrl+Shift+G — go to address in the listing"
+        ]
+      },
+      {
+        "tool": "GDB",
+        "commands": [
+          "set *(char*)0xADDR = 0x75 — change one byte (e.g., je to jne)",
+          "set *(short*)0xADDR = 0x9090 — NOP out a 2-byte instruction",
+          "jump *0xADDR — force execution to jump to an address"
+        ]
+      },
+      {
+        "tool": "radare2",
+        "commands": [
+          "r2 -w binary — open in write mode",
+          "s 0xADDR — seek to the target instruction",
+          "wa jne 0xTARGET — write a new jump instruction",
+          "wao nop — NOP the current instruction"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Load the binary in Ghidra and find the authentication function. Look for where user input is compared against an expected value.",
+      "Identify the conditional jump that decides between success and failure. What opcode is it using?",
+      "You don't need to find the correct password. You just need to make the binary take the success path regardless of input.",
+      "Try changing the conditional jump opcode: `je` (0x74) to `jne` (0x75), or replace the entire jump with NOP bytes.",
+      "After patching, export the modified binary from Ghidra or use radare2's write mode, then run it with any input."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A binary performs an authentication check. You need to bypass the check to access the protected functionality that reveals the flag.\n\n**Approach:** Identify the conditional jump controlling authentication flow and patch it to always take the success path.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Analyze the binary in Ghidra",
+        "command": "Ghidra: Import → Analyze → Navigate to main()",
+        "explanation": "Import the binary and run auto-analysis. The main function (or a similarly named entry function) contains the authentication logic. The decompiler shows the flow: read input → validate → branch to success or failure."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Identify the authentication check",
+        "command": "Ghidra: Read the decompiled if-statement that gates access",
+        "explanation": "The decompiled code shows a function that validates the password and returns a boolean. The return value is tested, and a conditional jump (`je` or `jne`) determines whether execution continues to the flag-printing code or the rejection message."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Locate the conditional jump in the listing view",
+        "command": "Ghidra: Click the if-statement in decompiler → listing view highlights the corresponding assembly",
+        "explanation": "Clicking on the `if` condition in the decompiler highlights the corresponding `test` and `je`/`jne` instructions in the listing (assembly) view. Note the exact address and opcode of the conditional jump. This is the instruction you'll patch."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Patch the jump instruction",
+        "command": "Ghidra: Right-click the je/jne instruction → Patch Instruction → change to opposite",
+        "explanation": "If the instruction is `je fail` (jump to failure when check returns 0), change it to `jne fail` (only jump to failure when check returns non-zero — which means any wrong password succeeds). Alternatively, replace the 2-byte jump with `0x90 0x90` (two NOPs) so execution always falls through to the success path."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Export and run the patched binary",
+        "command": "Ghidra: File → Export Program → Binary → run the patched file",
+        "explanation": "Export the patched binary. Make it executable (`chmod +x`) and run it. Enter any password — the patched check always passes, and the binary reveals the flag. This demonstrates why authentication logic must never rely solely on client-side checks."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "impossible-password",
+    "nextChallengeId": "exatlon"
+  }
+}

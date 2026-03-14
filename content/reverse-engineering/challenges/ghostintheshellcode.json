@@ -1,0 +1,103 @@
+{
+  "challengeId": "ghostintheshellcode",
+  "name": "GhostInTheShelcode",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/GhostInTheShelcode",
+  "difficulty": "medium",
+  "estimatedTime": "2 - 3 hours",
+  "keyTakeaway": "Shellcode analysis — decoding and disassembling raw shellcode payloads to understand their behavior and extract embedded data",
+  "tags": ["shellcode", "x86", "disassembly", "decoding", "ghidra", "radare2"],
+  "fundamentals": {
+    "content": "## Shellcode Analysis Fundamentals\n\n### What Is Shellcode?\n\nShellcode is raw machine code designed to be injected and executed directly in memory. Unlike regular executables, shellcode:\n\n- Has **no headers** (no ELF/PE structure)\n- Is **position-independent** (works at any memory address)\n- Is typically **small** (hundreds of bytes)\n- Often contains **self-modifying or self-decoding** logic\n\n### How Shellcode Is Structured\n\nTypical shellcode follows this pattern:\n\n```\n[Decoder Stub] → [Encoded Payload]\n```\n\n1. **Decoder stub:** A small routine that decodes the rest of the shellcode at runtime\n2. **Encoded payload:** The actual functionality (spawn shell, download file, etc.) in encoded form\n\nThe decoder prevents the payload from containing null bytes or other restricted characters that would break injection.\n\n### Analyzing Shellcode\n\n**Step 1: Determine Architecture**\n\nShellcode targets a specific architecture. Look at the context:\n- 32-bit x86 shellcode uses `int 0x80` for syscalls\n- 64-bit x86-64 shellcode uses `syscall` instruction\n- ARM shellcode uses `svc #0`\n\n**Step 2: Disassemble the Raw Bytes**\n\nSince shellcode has no headers, you need to tell the disassembler what architecture to use:\n\n```bash\n# Using objdump\necho -ne '\\x48\\x31\\xc0...' > shellcode.bin\nobjdump -D -b binary -m i386:x86-64 shellcode.bin\n\n# Using radare2\nr2 -a x86 -b 64 shellcode.bin\naaa\npdf @ 0x0\n\n# Using ndisasm (from NASM)\nndisasm -b 64 shellcode.bin\n```\n\n**Step 3: Identify the Decoder**\n\nCommon decoder patterns:\n\n| Pattern | Technique |\n|---------|-----------|\n| `xor byte [esi+ecx], key; loop` | XOR decoder with loop |\n| `call next; next: pop esi` | Get EIP/RIP trick (find own address) |\n| `jmp short encoded; call decoder` | JMP-CALL-POP pattern |\n| `rol/ror byte [edi], n` | Rotation-based decoder |\n\n**Step 4: Decode the Payload**\n\nOnce you identify the decoding algorithm, apply it to the encoded bytes to reveal the actual shellcode. Then disassemble the decoded payload.\n\n### Loading Shellcode in Ghidra\n\nTo analyze shellcode in Ghidra:\n1. File → Import File → select the raw binary\n2. Format: **Raw Binary**\n3. Language: **x86:LE:64:default** (or 32-bit as appropriate)\n4. Base address: **0x0** (or any address)\n5. After import, select all bytes → right-click → Disassemble\n6. Create a function at the entry point for decompiler support",
+    "toolReferences": [
+      {
+        "tool": "radare2",
+        "commands": [
+          "r2 -a x86 -b 64 shellcode.bin — open raw binary as x86-64",
+          "aaa — analyze all",
+          "pdf @ 0x0 — disassemble from start",
+          "s 0x0 && af — create function at address 0",
+          "pD 100 — disassemble 100 bytes from current position"
+        ]
+      },
+      {
+        "tool": "Ghidra",
+        "commands": [
+          "Import as Raw Binary → x86:LE:64:default",
+          "Select bytes → Right-click → Disassemble",
+          "Select range → Right-click → Create Function",
+          "Window → Bytes — view raw hex alongside disassembly"
+        ]
+      },
+      {
+        "tool": "ndisasm",
+        "commands": [
+          "ndisasm -b 64 shellcode.bin — disassemble as 64-bit x86",
+          "ndisasm -b 32 shellcode.bin — disassemble as 32-bit x86"
+        ]
+      },
+      {
+        "tool": "Python",
+        "commands": [
+          "from capstone import Cs, CS_ARCH_X86, CS_MODE_64 — disassemble with Capstone",
+          "md = Cs(CS_ARCH_X86, CS_MODE_64); [print(f'{i.mnemonic} {i.op_str}') for i in md.disasm(code, 0x0)]"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "The challenge provides raw shellcode bytes. Start by determining the target architecture (32-bit or 64-bit x86).",
+      "Disassemble the first few bytes. You'll likely see a decoder stub that uses XOR or a similar operation to decode the rest.",
+      "The decoder often uses a 'get RIP' trick: `call next; pop rsi` to find its own position in memory. This is a hallmark of position-independent code.",
+      "Identify the decoding loop's key and algorithm. Extract the encoded bytes and apply the decoding in Python.",
+      "After decoding, disassemble the decoded payload. The flag or relevant data is embedded in the decoded shellcode.",
+      "Look for strings being pushed onto the stack byte-by-byte — shellcode often constructs strings this way to avoid null bytes."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** You're given a binary containing or referencing shellcode. The shellcode is encoded and must be decoded to reveal its true purpose and extract the flag.\n\n**Approach:** Disassemble the raw shellcode, identify the decoder stub, extract the encoded payload, apply the decoding algorithm, and analyze the decoded shellcode.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Extract and identify the shellcode",
+        "command": "file challenge_file && xxd challenge_file | head -20",
+        "explanation": "Examine the file to understand its format. If it's a raw binary blob, you'll need to determine the architecture from context or by trying different disassembly modes. Use `xxd` to view the raw hex bytes and look for common shellcode patterns."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Disassemble the shellcode entry point",
+        "command": "r2 -a x86 -b 64 shellcode.bin → aaa → pdf @ 0x0",
+        "explanation": "Open the shellcode in radare2 with the appropriate architecture settings. The first instructions are the decoder stub. Look for patterns like: register initialization, a loop with XOR/ADD/SUB operations, and a jump to decoded code. The decoder typically sets up a counter, a key, and a pointer to the encoded data."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Identify the decoding algorithm",
+        "command": "Analyze the decoder loop in the disassembly",
+        "explanation": "Read the decoder stub carefully. Common patterns include single-byte XOR (`xor byte [reg+counter], key`), multi-byte XOR with a rotating key, or additive encoders. Note the key value, the start offset of the encoded data, and the length of data to decode."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Decode the payload in Python",
+        "command": "python3 -c \"data = open('shellcode.bin','rb').read(); key = 0xAA; decoded = bytes(b ^ key for b in data[offset:]); open('decoded.bin','wb').write(decoded)\"",
+        "explanation": "Using the key and algorithm identified in the previous step, write a Python script that applies the same decoding operation to the encoded payload bytes. Write the decoded output to a new file for further analysis."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Analyze the decoded shellcode",
+        "command": "r2 -a x86 -b 64 decoded.bin → aaa → pdf @ 0x0",
+        "explanation": "Disassemble the decoded payload. The decoded shellcode reveals its actual purpose. Look for embedded strings (often pushed onto the stack one DWORD at a time), syscall numbers that indicate operations (execve, write, connect), and any embedded data like the flag."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Extract the flag from the decoded payload",
+        "command": "strings decoded.bin or extract from stack-push sequences",
+        "explanation": "The flag may be visible as a plain string in the decoded payload, or it may be constructed on the stack through a series of `push` and `mov` instructions. If stack-constructed, read each pushed value as ASCII bytes in the correct order (remember x86 is little-endian, so byte order within each push is reversed)."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "ouija",
+    "nextChallengeId": "tear-or-dear"
+  }
+}

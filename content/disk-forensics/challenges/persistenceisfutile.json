@@ -1,0 +1,106 @@
+{
+  "challengeId": "persistenceisfutile",
+  "name": "PersistenceIsFutile",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/PersistenceIsFutile",
+  "difficulty": "medium",
+  "estimatedTime": "3-4 hours",
+  "keyTakeaway": "Windows persistence mechanism detection — identifying registry-based persistence including Run keys, services, scheduled tasks, and COM hijacking",
+  "tags": ["persistence", "registry", "services", "scheduled-tasks", "com-hijacking", "autoruns"],
+  "fundamentals": {
+    "content": "## Windows Persistence Mechanism Detection\n\n### Why Persistence Is Critical to Investigate\n\nPersistence mechanisms ensure an attacker's access survives system reboots, user logoffs, and even some remediation attempts. Identifying ALL persistence points is essential because missing even one means the attacker can return after an otherwise successful cleanup.\n\n### The Persistence Taxonomy\n\nWindows offers dozens of persistence mechanisms. The most common categories:\n\n#### Registry-Based Persistence\n\n| Location | Scope | Description |\n|----------|-------|------------|\n| `HKLM\\...\\Run` | All users | Executes at every logon |\n| `HKCU\\...\\Run` | Current user | Executes at user logon |\n| `HKLM\\...\\RunOnce` | All users | Executes once then deletes itself |\n| `HKLM\\...\\Winlogon\\Shell` | System | Replaces or augments the shell |\n| `HKLM\\...\\Winlogon\\Userinit` | System | Runs at logon initialization |\n| `HKLM\\...\\Image File Execution Options` | System | Debugger redirection (runs instead of target) |\n\n#### Service-Based Persistence\n\nMalicious services are installed in `HKLM\\SYSTEM\\CurrentControlSet\\Services\\`. Key indicators:\n- Service `ImagePath` points to unusual locations (Temp, AppData, ProgramData)\n- Service type `0x10` (own process) or `0x20` (share process)\n- Start type `0x02` (automatic) ensures execution at boot\n- Service description is empty or generic\n\n#### Scheduled Task Persistence\n\nTasks in `C:\\Windows\\System32\\Tasks\\` with:\n- Trigger at system startup or user logon\n- Action pointing to suspicious executables\n- Running as SYSTEM or a privileged account\n\n#### COM Hijacking\n\nAttackers can hijack Component Object Model (COM) objects by:\n1. Finding a COM CLSID that's loaded by legitimate processes\n2. Creating a user-level registry key (`HKCU\\Software\\Classes\\CLSID\\{GUID}`) that overrides the system-level entry\n3. Pointing the hijacked CLSID to their malicious DLL\n\nThis is stealthy because the malicious code runs inside a legitimate process.\n\n### Detection Approach\n\nThe systematic approach to persistence hunting:\n1. **Autoruns analysis** — use Sysinternals Autoruns to enumerate all autostart locations\n2. **Registry diff** — compare current registry against a known-good baseline\n3. **Timeline analysis** — correlate persistence creation time with the compromise window\n4. **Hash verification** — check executables referenced by persistence entries against known-good hashes",
+    "toolReferences": [
+      {
+        "tool": "RegRipper",
+        "commands": [
+          "rip.pl -r NTUSER.DAT -p run (Run key entries)",
+          "rip.pl -r NTUSER.DAT -p clsid (COM object entries per user)",
+          "rip.pl -r SOFTWARE -p run (machine-wide Run keys)",
+          "rip.pl -r SYSTEM -p services (all installed services)",
+          "rip.pl -r SOFTWARE -p imagefile (Image File Execution Options)"
+        ]
+      },
+      {
+        "tool": "Autoruns (Sysinternals)",
+        "commands": [
+          "autorunsc.exe -a * -s -h -c > autoruns.csv (export all autoruns to CSV)",
+          "autorunsc.exe -a * -vt (check against VirusTotal)",
+          "Focus on entries with: unsigned binaries, unusual paths, recently created timestamps"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "This challenge requires methodical enumeration of ALL persistence mechanisms — don't stop after finding the first one, as attackers typically plant multiple.",
+      "Start with registry Run keys (both HKLM and HKCU) and services — these are the most common persistence mechanisms.",
+      "Check for COM hijacking by examining HKCU\\Software\\Classes\\CLSID entries — these override system-level COM objects.",
+      "Scheduled tasks can be analyzed from both the XML files in C:\\Windows\\System32\\Tasks\\ and the TaskCache registry key.",
+      "Look at Image File Execution Options (IFEO) — attackers use the Debugger value to redirect legitimate executables to malicious ones.",
+      "Compare timestamps on persistence entries — entries created during the compromise window are likely attacker-planted."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A Windows system has been compromised and the attacker established multiple persistence mechanisms. Your job is to identify every persistence point the attacker created, understand how each works, and document them for remediation. The attacker was thorough — expect several different persistence techniques layered for redundancy.\n\n**Persistence hunting checklist:**\n\n| Category | Registry Location | Tool |\n|----------|------------------|------|\n| Run keys | HKLM/HKCU\\...\\Run | RegRipper |\n| Services | HKLM\\SYSTEM\\...\\Services | RegRipper |\n| Scheduled tasks | TaskCache + XML files | Task XML parser |\n| COM hijacks | HKCU\\...\\CLSID | Registry Explorer |\n| IFEO | HKLM\\SOFTWARE\\...\\IFEO | RegRipper |\n| WMI subscriptions | WMI repository | Get-WMIObject |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Enumerate Run key persistence",
+        "command": "rip.pl -r SOFTWARE -p run && rip.pl -r NTUSER.DAT -p run",
+        "explanation": "Parse both the SOFTWARE hive (machine-wide Run keys) and each user's NTUSER.DAT (per-user Run keys). Any executable listed in Run keys automatically executes at every logon. Look for: entries pointing to unusual paths (Temp, AppData, ProgramData), recently added entries (check LastWrite timestamps), and entries with obfuscated or encoded command lines."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Analyze installed services for malicious entries",
+        "command": "rip.pl -r SYSTEM -p services",
+        "explanation": "Parse the SYSTEM hive for all services. For each service, check: (1) ImagePath — does it point to a legitimate system directory or a suspicious location? (2) Start type — is it set to automatic (0x02)? (3) Service name — does it mimic a legitimate service with a slight misspelling? (4) Creation timestamp — was it created during the incident window? Malicious services often have generic names and point to binaries in non-standard locations."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Check for scheduled task persistence",
+        "command": "Examine C:\\Windows\\System32\\Tasks\\ and TaskCache registry key",
+        "explanation": "Parse scheduled task XML files for tasks with suspicious actions. The XML contains the full command that executes, the trigger (startup, logon, timer), and the security principal (SYSTEM, user). Cross-reference with `HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tree` for task creation timestamps and run history."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Detect COM object hijacking",
+        "command": "Registry Explorer: navigate HKCU\\Software\\Classes\\CLSID\\",
+        "explanation": "COM hijacking works by creating user-level registry entries that override system-level COM object definitions. Browse `HKCU\\Software\\Classes\\CLSID\\` for any entries — on a clean system, this location has very few or no entries. Each CLSID entry with an `InprocServer32` subkey pointing to a DLL is a potential hijack. Cross-reference the CLSID with `HKLM\\Software\\Classes\\CLSID\\` to see what legitimate COM object was hijacked."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Check Image File Execution Options (IFEO) for debugger redirection",
+        "command": "rip.pl -r SOFTWARE -p imagefile",
+        "explanation": "IFEO allows setting a 'debugger' for any executable. When the target executable launches, Windows actually runs the debugger with the target as an argument. Attackers set the debugger value to their malicious binary, so when a user runs a legitimate program (e.g., notepad.exe), the malware executes instead. Check `HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\` for any entries with a Debugger value."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Examine Winlogon registry modifications",
+        "command": "rip.pl -r SOFTWARE -p winlogon",
+        "explanation": "The Winlogon registry key controls the logon process. Check: (1) `Shell` value — should be `explorer.exe`, anything appended runs alongside Explorer, (2) `Userinit` value — should be `userinit.exe,`, anything appended runs during logon initialization, (3) `Notify` subkeys — DLLs loaded during logon events. Any modification to these values is a high-severity persistence mechanism."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Look for WMI event subscription persistence",
+        "command": "Examine WMI repository files in C:\\Windows\\System32\\wbem\\Repository\\",
+        "explanation": "WMI event subscriptions are a fileless persistence technique. The attacker creates an EventFilter (trigger condition), EventConsumer (action to take), and FilterToConsumerBinding (links them). These are stored in the WMI repository, not in the registry or filesystem. Look for CommandLineEventConsumer or ActiveScriptEventConsumer entries with suspicious commands."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Correlate persistence timestamps with the compromise timeline",
+        "command": "Build a timeline of all persistence creation events",
+        "explanation": "For each identified persistence mechanism, record when it was created (registry key LastWrite time, file creation time, event log entries). Group them chronologically to understand the attacker's persistence strategy: Did they plant everything at once? Did they add new persistence after initial discovery? Were persistence mechanisms added from different accounts (suggesting privilege escalation)?"
+      },
+      {
+        "stepNumber": 9,
+        "description": "Verify persistence by examining referenced executables",
+        "command": "Extract and hash all executables referenced by persistence mechanisms",
+        "explanation": "For each persistence entry, extract the referenced executable or DLL and: (1) Calculate its hash (SHA256), (2) Check against threat intelligence (VirusTotal), (3) Examine with basic static analysis (strings, imports), (4) Note the file's creation timestamp. This confirms whether the persistence points to actual malware or if some entries are false positives from legitimate software."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "crownjewel-2",
+    "nextChallengeId": "jingle"
+  }
+}

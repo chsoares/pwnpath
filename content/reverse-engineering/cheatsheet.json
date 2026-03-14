@@ -1,0 +1,122 @@
+{
+  "categoryId": "reverse-engineering",
+  "title": "Reverse Engineering Cheatsheet",
+  "sections": [
+    {
+      "title": "File Identification & Triage",
+      "commands": [
+        { "command": "file binary", "description": "Identify file type, architecture, linking, and whether stripped" },
+        { "command": "readelf -h binary", "description": "Display ELF header (entry point, architecture, type)" },
+        { "command": "readelf -S binary", "description": "List all sections (.text, .data, .rodata, .bss, etc.)" },
+        { "command": "readelf -s binary", "description": "Display symbol table (function names, global variables)" },
+        { "command": "readelf -l binary", "description": "Show program headers (segments loaded at runtime)" },
+        { "command": "objdump -d binary", "description": "Disassemble all executable sections" },
+        { "command": "objdump -d -M intel binary", "description": "Disassemble using Intel syntax (easier to read)" },
+        { "command": "objdump -t binary", "description": "Display symbol table entries" },
+        { "command": "checksec --file=binary", "description": "Check security features (NX, PIE, RELRO, canary, RPATH)" },
+        { "command": "ldd binary", "description": "List shared library dependencies" }
+      ]
+    },
+    {
+      "title": "Static Analysis (strings, ltrace, strace)",
+      "commands": [
+        { "command": "strings binary", "description": "Extract printable ASCII strings (min 4 chars by default)" },
+        { "command": "strings -n 8 binary", "description": "Extract strings with minimum length of 8 characters" },
+        { "command": "strings -e l binary", "description": "Extract UTF-16LE strings (common in Windows PE binaries)" },
+        { "command": "ltrace ./binary", "description": "Trace library calls (strcmp, strlen, printf, malloc, etc.)" },
+        { "command": "ltrace -s 200 ./binary", "description": "Trace library calls with string display up to 200 chars" },
+        { "command": "strace ./binary", "description": "Trace system calls (open, read, write, mmap, etc.)" },
+        { "command": "strace -f ./binary", "description": "Trace system calls following child processes" },
+        { "command": "strace -e trace=file ./binary", "description": "Trace only file-related system calls" },
+        { "command": "nm binary", "description": "List symbols from object file (functions and variables)" },
+        { "command": "nm -D binary", "description": "List dynamic symbols (imported/exported functions)" }
+      ]
+    },
+    {
+      "title": "Ghidra Essentials",
+      "commands": [
+        { "command": "File → Import File → Select binary", "description": "Import a binary for analysis (auto-detects format and architecture)" },
+        { "command": "Analysis → Auto Analyze", "description": "Run all automatic analysis passes (functions, xrefs, types)" },
+        { "command": "Window → Defined Strings", "description": "View all identified strings and their cross-references" },
+        { "command": "Window → Symbol Table", "description": "Browse all identified symbols (functions, labels, variables)" },
+        { "command": "Window → Function Graph", "description": "View control flow graph of the current function" },
+        { "command": "Search → For Strings", "description": "Search for specific strings across the entire binary" },
+        { "command": "Search → For Scalars", "description": "Search for specific constant values (hex, decimal)" },
+        { "command": "Right-click → References → Show References to", "description": "Find all locations that reference the selected address" },
+        { "command": "Right-click → Rename (L key)", "description": "Rename a function or variable for clarity" },
+        { "command": "Right-click → Retype (Ctrl+L)", "description": "Change the data type of a variable in the decompiler" },
+        { "command": "Navigation → Go To (G key)", "description": "Jump to a specific address or symbol" },
+        { "command": "Right-click → Patch Instruction", "description": "Modify instruction bytes directly in the listing" }
+      ]
+    },
+    {
+      "title": "GDB Commands",
+      "commands": [
+        { "command": "gdb ./binary", "description": "Start GDB with the target binary" },
+        { "command": "info functions", "description": "List all known functions" },
+        { "command": "disas main", "description": "Disassemble the main function" },
+        { "command": "b *0x401234", "description": "Set breakpoint at a specific address" },
+        { "command": "b main", "description": "Set breakpoint at the start of main" },
+        { "command": "r", "description": "Run the program (or restart if already running)" },
+        { "command": "r < input.txt", "description": "Run with input redirected from a file" },
+        { "command": "ni", "description": "Step one instruction (step over calls)" },
+        { "command": "si", "description": "Step one instruction (step into calls)" },
+        { "command": "c", "description": "Continue execution until next breakpoint" },
+        { "command": "info registers", "description": "Display all register values" },
+        { "command": "x/20wx $rsp", "description": "Examine 20 words (hex) on the stack" },
+        { "command": "x/s 0x402000", "description": "Examine memory at address as a string" },
+        { "command": "x/10i $rip", "description": "Disassemble 10 instructions from current instruction pointer" },
+        { "command": "set $rip = 0x401234", "description": "Change instruction pointer (skip code)" },
+        { "command": "set *(int*)0x404000 = 1", "description": "Write a value to a memory address" },
+        { "command": "vmmap", "description": "(pwndbg) Show memory map of the process" },
+        { "command": "telescope $rsp 20", "description": "(pwndbg) Dereference and display 20 stack entries" }
+      ]
+    },
+    {
+      "title": "radare2 / rizin",
+      "commands": [
+        { "command": "r2 binary", "description": "Open a binary in radare2" },
+        { "command": "r2 -d binary", "description": "Open binary in debug mode" },
+        { "command": "aaa", "description": "Analyze all (functions, references, strings)" },
+        { "command": "afl", "description": "List all functions found by analysis" },
+        { "command": "s main", "description": "Seek to the main function" },
+        { "command": "pdf", "description": "Print disassembly of the current function" },
+        { "command": "pdf @ sym.main", "description": "Print disassembly of main from anywhere" },
+        { "command": "VV", "description": "Enter visual graph mode (control flow graph)" },
+        { "command": "iz", "description": "List strings in the data sections" },
+        { "command": "izz", "description": "List all strings in the entire binary" },
+        { "command": "axt 0x401234", "description": "Show cross-references to an address" },
+        { "command": "px 64 @ 0x402000", "description": "Print 64 bytes as hex dump at address" },
+        { "command": "db 0x401234", "description": "Set breakpoint at address (debug mode)" },
+        { "command": "dc", "description": "Continue execution (debug mode)" },
+        { "command": "dr", "description": "Show register values (debug mode)" },
+        { "command": "wa nop @ 0x401234", "description": "Write a NOP instruction at address (patching)" }
+      ]
+    },
+    {
+      "title": "Python Reversing",
+      "commands": [
+        { "command": "uncompyle6 file.pyc", "description": "Decompile .pyc file back to Python source code" },
+        { "command": "pycdc file.pyc", "description": "Decompile .pyc using pycdc (supports newer Python versions)" },
+        { "command": "python3 -m dis file.py", "description": "Show Python bytecode disassembly of a script" },
+        { "command": "python3 -c \"import dis, marshal; f=open('file.pyc','rb'); f.read(16); dis.dis(marshal.load(f))\"", "description": "Disassemble bytecode from a .pyc file directly" },
+        { "command": "pyinstxtractor.py packed.exe", "description": "Extract files from a PyInstaller-packed executable" },
+        { "command": "python3 -c \"import struct; f=open('file.pyc','rb'); print(struct.unpack('<H',f.read(2))[0])\"", "description": "Read the magic number to identify the Python version of a .pyc file" },
+        { "command": "strings packed.exe | grep 'PYZ'", "description": "Check if an executable is PyInstaller-packed" }
+      ]
+    },
+    {
+      "title": "Anti-Debugging & Obfuscation",
+      "commands": [
+        { "command": "grep -r 'ptrace' binary_strings.txt", "description": "Check for ptrace-based anti-debugging (PTRACE_TRACEME)" },
+        { "command": "strace ./binary 2>&1 | grep ptrace", "description": "Detect if binary calls ptrace to prevent debugging" },
+        { "command": "LD_PRELOAD=./fakeptrace.so ./binary", "description": "Bypass ptrace anti-debug by preloading a library that stubs ptrace" },
+        { "command": "set *(char*)(&ptrace) = 0xc3", "description": "(GDB) Patch ptrace to return immediately (0xc3 = ret)" },
+        { "command": "catch syscall ptrace", "description": "(GDB) Break on ptrace syscall to inspect and modify its behavior" },
+        { "command": "upx -d packed_binary", "description": "Unpack a UPX-packed binary" },
+        { "command": "strings binary | grep -i upx", "description": "Check if a binary is UPX-packed" },
+        { "command": "cat /proc/self/status | grep TracerPid", "description": "Check if current process is being traced (anti-debug check)" }
+      ]
+    }
+  ]
+}

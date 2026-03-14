@@ -1,0 +1,81 @@
+{
+  "challengeId": "dvho",
+  "name": "DVHO",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/DVHO",
+  "difficulty": "very_easy",
+  "estimatedTime": "30 min - 1 hour",
+  "keyTakeaway": "Simple conditional check reversing — reading decompiled code to understand password validation logic and bypass it",
+  "tags": ["elf", "ghidra", "conditional", "decompilation", "beginner"],
+  "fundamentals": {
+    "content": "## Understanding Conditional Checks in Decompiled Code\n\n### How Programs Validate Input\n\nAt its core, most password/flag checks in CTF binaries follow this pattern:\n\n```c\nif (user_input == expected_value) {\n    printf(\"Correct! Flag: ...\");\n} else {\n    printf(\"Wrong!\");\n}\n```\n\nWhen compiled, this becomes assembly that:\n1. Loads the expected value into a register or memory\n2. Compares it against user input (`cmp` instruction)\n3. Uses a conditional jump (`je`, `jne`, `jz`, `jnz`) to branch\n\n### Reading x86 Comparison Patterns\n\nCommon assembly patterns for comparisons:\n\n```asm\n; Integer comparison\nmov eax, [rbp-0x4]    ; Load user input\ncmp eax, 0x539        ; Compare with 1337\njne fail_label        ; Jump if not equal\n\n; String comparison via strcmp\nlea rdi, [user_input]\nlea rsi, [expected_str]\ncall strcmp\ntest eax, eax         ; strcmp returns 0 if equal\njnz fail_label        ; Jump if not zero (strings differ)\n```\n\n### Ghidra's Decompiler View\n\nGhidra's decompiler translates assembly back into C-like pseudocode. For a simple check, you might see:\n\n```c\nif (local_1c == 0xdeadbeef) {\n    puts(\"Access granted\");\n}\n```\n\nThe value `0xdeadbeef` is the expected input. You can convert it to decimal, provide it as input, and pass the check.\n\n### Key Concept: The Comparison Is the Vulnerability\n\nIn real software, hardcoding expected values in the binary is a critical flaw. Any reverse engineer can extract them. Secure applications use hashing (bcrypt, argon2) so the expected value is never stored in a recoverable form. In CTF challenges, this hardcoded comparison is intentional — it's the puzzle you need to solve.",
+    "toolReferences": [
+      {
+        "tool": "Ghidra",
+        "commands": [
+          "Import binary → Auto Analyze → Navigate to main()",
+          "Window → Defined Strings — find strings referenced in the binary",
+          "Double-click a function call in decompiler to follow it",
+          "Right-click variable → Rename — label variables for clarity"
+        ]
+      },
+      {
+        "tool": "GDB",
+        "commands": [
+          "b main — breakpoint at main",
+          "r — run the program",
+          "info registers — check register values at comparison point",
+          "set $eax = 0 — modify register to bypass check"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Load the binary in Ghidra and let auto-analysis complete. Then find and decompile the main() function.",
+      "Look for `if` statements in the decompiled output. The condition tells you exactly what value the program expects.",
+      "The expected value might be an integer stored as a hex constant. Convert it to decimal to provide it as command-line input.",
+      "If the comparison uses a function like `atoi()`, the program converts your string input to an integer before comparing.",
+      "Alternatively, use GDB to set a breakpoint at the comparison instruction and modify the register to force the branch."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** You receive a simple ELF binary that asks for a numeric input and checks it against an expected value. Finding the correct value reveals the flag.\n\n**Approach:** Load the binary into Ghidra, read the decompiled main() function, identify the comparison value, and provide the correct input.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Triage the binary",
+        "command": "file ./dvho && strings ./dvho | head -30",
+        "explanation": "Initial triage shows this is a standard 64-bit ELF. Strings may reveal prompts like 'Enter password' or success/failure messages. This tells us the binary expects some form of user input."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Load in Ghidra and find main()",
+        "command": "Ghidra: File → Import → dvho → Analyze → Navigate to main()",
+        "explanation": "Import the binary and run auto-analysis. Since the binary is not stripped, the `main` function should appear in the Symbol Tree. Double-click it to view the decompiled code."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Read the decompiled conditional check",
+        "command": "Ghidra: Read the decompiler output for main()",
+        "explanation": "The decompiled code reveals a straightforward `if` statement comparing user input (converted via `atoi`) against a hardcoded integer constant. The constant is displayed in hexadecimal in the decompiler. For example, a comparison like `if (iVar1 == 0xdeadbeef)` means the program expects the decimal equivalent of that hex value."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Convert the hex value and provide correct input",
+        "command": "python3 -c \"print(0xHEX_VALUE)\" && ./dvho <decimal_value>",
+        "explanation": "Convert the hexadecimal constant from the decompiler to its decimal representation using Python. Provide this decimal number as input to the binary. The comparison succeeds, the correct branch executes, and the flag is printed."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Alternative: Bypass with GDB",
+        "command": "gdb ./dvho → b *<cmp_address> → r → set $eax = <expected> → c",
+        "explanation": "As an alternative approach, you can use GDB to set a breakpoint at the comparison instruction, then modify the register to force equality. This technique is useful when the expected value is computed at runtime rather than hardcoded. Set a breakpoint at the `cmp` instruction, run the program with any input, then modify the appropriate register before continuing."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "behind-the-scenes",
+    "nextChallengeId": "shattered-tablet"
+  }
+}

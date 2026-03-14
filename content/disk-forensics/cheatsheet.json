@@ -1,0 +1,90 @@
+{
+  "categoryId": "disk-forensics",
+  "title": "Disk & Filesystem Forensics Cheatsheet",
+  "sections": [
+    {
+      "title": "Disk Image Mounting & Triage",
+      "commands": [
+        { "command": "mmls disk.E01", "description": "Display partition layout of a disk image (Sleuth Kit)" },
+        { "command": "fsstat -o 2048 disk.E01", "description": "Show filesystem details for a specific partition (offset in sectors)" },
+        { "command": "mount -o ro,loop,offset=$((2048*512)) disk.raw /mnt/evidence", "description": "Mount a raw disk image read-only at a given sector offset" },
+        { "command": "ewfmount disk.E01 /mnt/ewf && mount -o ro,loop /mnt/ewf/ewf1 /mnt/evidence", "description": "Mount an E01 (EnCase) image via ewfmount" },
+        { "command": "fls -r -o 2048 disk.E01", "description": "Recursively list all files (including deleted) in a partition" },
+        { "command": "icat -o 2048 disk.E01 <inode>", "description": "Extract a specific file by inode number from the image" },
+        { "command": "img_stat disk.E01", "description": "Display image format and size details" },
+        { "command": "ftkimager --verify disk.E01", "description": "Verify image integrity using FTK Imager CLI" }
+      ]
+    },
+    {
+      "title": "NTFS & MFT Analysis",
+      "commands": [
+        { "command": "MFTECmd.exe -f $MFT --csv . --csvf mft_output.csv", "description": "Parse the $MFT file and export to CSV" },
+        { "command": "MFTECmd.exe -f $J --csv . --csvf usn_journal.csv", "description": "Parse the USN Journal ($J) for file change records" },
+        { "command": "MFTECmd.exe -f $LogFile --csv . --csvf logfile.csv", "description": "Parse the NTFS $LogFile for transaction records" },
+        { "command": "analyzeMFT.py -f $MFT -o mft_analysis.csv", "description": "Alternative MFT parser (Python-based)" },
+        { "command": "icat -o 2048 disk.E01 0 > $MFT", "description": "Extract $MFT from disk image (inode 0 is always $MFT)" },
+        { "command": "fls -o 2048 -Drp disk.E01", "description": "List only deleted files recursively from a partition" }
+      ]
+    },
+    {
+      "title": "Registry Forensics",
+      "commands": [
+        { "command": "rip.pl -r SYSTEM -p compname", "description": "Extract computer name from SYSTEM hive (RegRipper)" },
+        { "command": "rip.pl -r SOFTWARE -p runmru", "description": "Extract Run dialog history from SOFTWARE hive" },
+        { "command": "rip.pl -r NTUSER.DAT -p userassist", "description": "Extract UserAssist data (program execution history)" },
+        { "command": "rip.pl -r NTUSER.DAT -p recentdocs", "description": "Extract recently opened documents" },
+        { "command": "rip.pl -r SYSTEM -p services", "description": "List all installed services from SYSTEM hive" },
+        { "command": "rip.pl -r SAM -p samparse", "description": "Extract local user account information from SAM hive" },
+        { "command": "RECmd.exe -d C:\\Windows\\System32\\config --csv . --csvf registry_output.csv", "description": "Batch process registry hives with Eric Zimmerman's RECmd" },
+        { "command": "Registry hive locations: C:\\Windows\\System32\\config\\{SAM,SYSTEM,SOFTWARE,SECURITY}", "description": "Default Windows registry hive file paths" },
+        { "command": "User hives: C:\\Users\\<user>\\NTUSER.DAT, C:\\Users\\<user>\\AppData\\Local\\Microsoft\\Windows\\UsrClass.dat", "description": "Per-user registry hive locations (NTUSER.DAT and UsrClass.dat for Shellbags)" }
+      ]
+    },
+    {
+      "title": "Windows Artifacts (Prefetch, Shellbags, LNK, Jump Lists)",
+      "commands": [
+        { "command": "PECmd.exe -d C:\\Windows\\Prefetch --csv . --csvf prefetch.csv", "description": "Parse all Prefetch files (program execution evidence)" },
+        { "command": "LECmd.exe -d C:\\Users --csv . --csvf lnk_files.csv", "description": "Parse LNK (shortcut) files for file access evidence" },
+        { "command": "JLECmd.exe -d C:\\Users\\<user>\\AppData\\Roaming\\Microsoft\\Windows\\Recent\\AutomaticDestinations --csv .", "description": "Parse Jump Lists for recently accessed files per application" },
+        { "command": "SBECmd.exe -d C:\\Users\\<user>\\AppData\\Local\\Microsoft\\Windows\\UsrClass.dat --csv .", "description": "Parse Shellbags (folder navigation history) from UsrClass.dat" },
+        { "command": "Prefetch location: C:\\Windows\\Prefetch\\*.pf", "description": "Default Prefetch file path (records last 8 execution times)" },
+        { "command": "Amcache location: C:\\Windows\\AppCompat\\Programs\\Amcache.hve", "description": "Amcache hive path (application execution and install history)" },
+        { "command": "AmcacheParser.exe -f Amcache.hve --csv . --csvf amcache.csv", "description": "Parse Amcache for application execution and SHA1 hashes" }
+      ]
+    },
+    {
+      "title": "File Recovery & Carving",
+      "commands": [
+        { "command": "photorec disk.E01", "description": "Recover deleted files by file signature (file carving)" },
+        { "command": "foremost -i disk.raw -o recovered/", "description": "Carve files from a raw disk image based on headers/footers" },
+        { "command": "scalpel -c scalpel.conf -o recovered/ disk.raw", "description": "Configurable file carving tool" },
+        { "command": "bulk_extractor -o output/ disk.E01", "description": "Extract email addresses, URLs, credit cards, and other artifacts from disk image" },
+        { "command": "icat -o 2048 -r disk.E01 <inode> > recovered_file", "description": "Recover a deleted file by inode if MFT entry still exists" },
+        { "command": "tsk_recover -o 2048 -e disk.E01 recovered/", "description": "Recover all deleted files from a partition (Sleuth Kit)" }
+      ]
+    },
+    {
+      "title": "Timeline Analysis (plaso / log2timeline)",
+      "commands": [
+        { "command": "log2timeline.py timeline.plaso disk.E01", "description": "Generate a super timeline from a disk image (outputs Plaso storage)" },
+        { "command": "psort.py -o l2tcsv timeline.plaso -w timeline.csv", "description": "Convert Plaso storage to CSV timeline format" },
+        { "command": "psort.py -o l2tcsv timeline.plaso \"date > '2024-01-01' AND date < '2024-01-31'\" -w filtered.csv", "description": "Filter timeline by date range" },
+        { "command": "pinfo.py timeline.plaso", "description": "Display information about a Plaso storage file" },
+        { "command": "mactime -b bodyfile.txt -d > timeline.csv", "description": "Generate MAC timeline from Sleuth Kit bodyfile" },
+        { "command": "fls -r -m '/' -o 2048 disk.E01 > bodyfile.txt", "description": "Generate a bodyfile for mactime timeline analysis" }
+      ]
+    },
+    {
+      "title": "Active Directory Forensics (ntds.dit, secretsdump)",
+      "commands": [
+        { "command": "secretsdump.py -ntds ntds.dit -system SYSTEM -security SECURITY LOCAL", "description": "Extract all hashes from ntds.dit using Impacket (requires SYSTEM hive)" },
+        { "command": "secretsdump.py -ntds ntds.dit -system SYSTEM -outputfile domain_hashes LOCAL", "description": "Extract hashes and save to file" },
+        { "command": "ntds.dit location: C:\\Windows\\NTDS\\ntds.dit", "description": "Default Active Directory database path" },
+        { "command": "esentutl.py -t ntds.dit", "description": "Parse ntds.dit ESE database tables (Impacket)" },
+        { "command": "vssadmin list shadows", "description": "List Volume Shadow Copies (attackers use these to access locked ntds.dit)" },
+        { "command": "ntdsutil \"activate instance ntds\" ifm \"create full C:\\temp\" quit quit", "description": "Create IFM backup of AD (method attackers use to extract ntds.dit)" },
+        { "command": "hashcat -m 1000 hashes.txt wordlist.txt", "description": "Crack extracted NTLM hashes from ntds.dit" }
+      ]
+    }
+  ]
+}

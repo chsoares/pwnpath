@@ -1,0 +1,104 @@
+{
+  "challengeId": "shadowroast",
+  "name": "ShadowRoast",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/ShadowRoast",
+  "difficulty": "hard",
+  "estimatedTime": "4-5 hours",
+  "keyTakeaway": "Volume Shadow Copy forensics — extracting evidence from VSS snapshots, recovering deleted credentials, and analyzing shadow copy-based attack techniques",
+  "tags": ["volume-shadow-copies", "VSS", "vssadmin", "credential-theft", "NTDS.dit", "shadow-copy-forensics", "Active Directory"],
+  "fundamentals": {
+    "content": "## Volume Shadow Copy (VSS) Forensics\n\n### What Are Volume Shadow Copies?\n\nVolume Shadow Copy Service (VSS) is a Windows framework that creates consistent point-in-time snapshots of disk volumes. Originally designed for backup and restore, VSS has become both a **critical forensic artifact** and an **attack technique**.\n\n### VSS as a Forensic Goldmine\n\nShadow copies preserve previous versions of files, including files that have been:\n- **Deleted** — the original version may exist in an older shadow copy\n- **Modified** — compare current vs. shadow copy versions to see what changed\n- **Encrypted by ransomware** — pre-encryption versions may survive in VSS\n\n| VSS Artifact | Forensic Value |\n|-------------|---------------|\n| Previous file versions | Recover deleted/modified evidence |\n| Registry hive snapshots | See historical configuration changes |\n| Event log copies | Recover cleared event logs |\n| NTDS.dit snapshots | Access domain credentials from a point in time |\n| User profile data | Browser history, documents before cleanup |\n\n### VSS as an Attack Technique\n\nAttackers abuse VSS to extract sensitive files that are normally locked by the OS:\n\n1. **NTDS.dit extraction** — The Active Directory database is locked during normal operation. Attackers use `vssadmin create shadow /for=C:` to create a snapshot, then copy `ntds.dit` from the shadow copy where it is not locked.\n2. **SAM/SYSTEM extraction** — Same technique applies to local credential stores.\n3. **Secretsdump via VSS** — Tools like `impacket-secretsdump` automate VSS creation + credential extraction.\n\n### Key VSS Commands\n\n```powershell\n# List existing shadow copies\nvssadmin list shadows\n\n# Create a new shadow copy (requires admin)\nvssadmin create shadow /for=C:\n\n# Access shadow copy files\nmklink /d C:\\shadowcopy \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\\n\n# Delete shadow copies (anti-forensics / ransomware)\nvssadmin delete shadows /all /quiet\n```\n\n### Detection & Investigation\n\n- **Event ID 8222** (VSS): Shadow copy creation\n- **Event ID 8224** (VSS): Shadow copy deletion\n- **vssadmin.exe** in Prefetch/Amcache indicates VSS manipulation\n- **wmic shadowcopy** commands in PowerShell history\n- **Sysmon Event ID 1** with vssadmin.exe process creation\n\n### Analysis Workflow\n\n1. **Check for existing shadow copies** on the forensic image\n2. **Mount shadow copies** and compare against current filesystem\n3. **Look for VSS manipulation artifacts** in event logs and command history\n4. **Extract files from shadow copies** that were deleted from the live filesystem\n5. **Timeline correlation** — when were shadow copies created/deleted relative to the incident?",
+    "toolReferences": [
+      {
+        "tool": "vssadmin / vshadowinfo",
+        "commands": [
+          "vssadmin list shadows (enumerate existing shadow copies)",
+          "vshadowinfo <image> (list VSS snapshots on a forensic image)",
+          "vshadowmount <image> /mnt/vss/ (mount VSS snapshots from image)"
+        ]
+      },
+      {
+        "tool": "impacket-secretsdump",
+        "commands": [
+          "secretsdump.py -ntds ntds.dit -system SYSTEM -hashes lmhash:nthash LOCAL (extract hashes from ntds.dit + SYSTEM hive)",
+          "secretsdump.py -just-dc domain/admin@dc-ip (remote extraction via VSS)"
+        ]
+      },
+      {
+        "tool": "Arsenal Image Mounter / FTK Imager",
+        "commands": [
+          "Mount forensic image and browse VSS snapshots via Previous Versions tab",
+          "Extract specific files from shadow copy volumes for comparison"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start by looking for evidence of VSS manipulation — check event logs for shadow copy creation/deletion events and command history for vssadmin commands.",
+      "Look at the timeline of events: when were shadow copies created vs. when did the attacker gain access? Shadow copies created right before credential theft are highly suspicious.",
+      "Check if NTDS.dit or SAM/SYSTEM files were accessed through shadow copy paths — the path will contain 'HarddiskVolumeShadowCopy' or a symlinked directory.",
+      "If shadow copies still exist on the forensic image, mount them and look for files that no longer exist on the live filesystem.",
+      "PowerShell history and Sysmon logs are your best friends for tracing VSS abuse — look for vssadmin.exe, wmic shadowcopy, and copy commands targeting shadow copy paths.",
+      "Don't forget to check if the attacker deleted shadow copies after extracting what they needed — this is common operational security."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** An Active Directory domain controller was compromised. The attacker used Volume Shadow Copy techniques to extract credential databases. You have a forensic triage collection from the DC including event logs, registry hives, filesystem artifacts, and Prefetch files.\n\n**Investigation focus:** Trace the attacker's use of VSS to extract NTDS.dit, identify what credentials were compromised, and determine the full scope of the VSS-based attack.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Check event logs for shadow copy creation events",
+        "command": "Filter for VSS Event IDs 8222 (creation) and 8224 (deletion) in the System or VSS event logs",
+        "explanation": "Shadow copy creation is logged by the VSS service. Event ID 8222 records when a new shadow copy is created, including the volume and timestamp. Look for shadow copy creation events that correlate with the attacker's access window — shadow copies created outside of normal backup schedules are suspicious."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Identify the VSS manipulation commands",
+        "command": "Check PowerShell ConsoleHost_history.txt, Sysmon Event ID 1, and Prefetch for vssadmin.exe",
+        "explanation": "The attacker used `vssadmin create shadow /for=C:` to create a snapshot of the system volume. This command is visible in PowerShell command history, Sysmon process creation logs, and Prefetch files. The Prefetch file for VSSADMIN.EXE shows execution timestamps and may reveal how many times it was run."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Trace the NTDS.dit extraction",
+        "command": "Look for copy/move commands targeting shadow copy paths in command history and Sysmon file creation events",
+        "explanation": "After creating the shadow copy, the attacker copies NTDS.dit from the shadow copy path: `copy \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\Windows\\NTDS\\ntds.dit C:\\temp\\ntds.dit`. This bypasses the file lock that normally prevents copying the live NTDS.dit. Also look for the SYSTEM registry hive being copied — it is needed alongside NTDS.dit for credential extraction."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Determine the SYSTEM hive extraction",
+        "command": "Check for reg.exe save commands or file copies of the SYSTEM hive",
+        "explanation": "The SYSTEM registry hive contains the boot key needed to decrypt NTDS.dit hashes. The attacker typically extracts it with `reg save HKLM\\SYSTEM C:\\temp\\system.bak` or copies it from the shadow copy. Without the SYSTEM hive, NTDS.dit hashes cannot be decrypted — both files together reveal all domain credentials."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Extract credentials from the stolen NTDS.dit",
+        "command": "secretsdump.py -ntds ntds.dit -system SYSTEM LOCAL",
+        "explanation": "Using Impacket's secretsdump with the extracted NTDS.dit and SYSTEM hive reveals all domain user NTLM hashes. This shows the full scope of credential compromise — every domain account's hash is exposed. The output includes username, RID, LM hash (usually empty), and NT hash for each account."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Check for shadow copy cleanup (anti-forensics)",
+        "command": "Filter for Event ID 8224 (shadow copy deletion) and vssadmin delete commands",
+        "explanation": "Sophisticated attackers delete shadow copies after extraction to cover their tracks. Look for `vssadmin delete shadows /all /quiet` in command history or Event ID 8224 entries. The timing of deletion relative to the NTDS.dit extraction confirms intentional anti-forensics. If shadow copies were deleted, note that the deletion event itself is evidence of the attack."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Check for data exfiltration of the extracted files",
+        "command": "Analyze network connections (Sysmon Event ID 3) and file access patterns around the extraction timestamps",
+        "explanation": "After extracting NTDS.dit and SYSTEM to a temp directory, the attacker needed to exfiltrate them. Look for: outbound network connections from the DC to unusual IPs, file compression (7z.exe, zip, tar in Prefetch), and web upload activity. The staging directory (often C:\\temp, C:\\Users\\Public, or %APPDATA%) may still contain artifacts."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Build the complete attack timeline",
+        "command": "Correlate all findings into a chronological timeline",
+        "explanation": "Reconstruct the full VSS-based credential theft chain: (1) Initial access to the DC, (2) Shadow copy creation with vssadmin, (3) NTDS.dit copied from shadow copy path, (4) SYSTEM hive extracted via reg save, (5) Files staged in temp directory, (6) Exfiltration to external host, (7) Shadow copy deletion (anti-forensics), (8) Credential use (pass-the-hash, golden ticket). This timeline scopes the full impact and informs the remediation plan — all domain passwords must be reset."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "jugglin",
+    "nextChallengeId": null
+  }
+}

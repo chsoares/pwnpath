@@ -1,0 +1,83 @@
+{
+  "challengeId": "ouija",
+  "name": "Ouija",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/Ouija",
+  "difficulty": "medium",
+  "estimatedTime": "2 - 3 hours",
+  "keyTakeaway": "Multi-function analysis — tracing data flow across multiple functions and understanding complex control flow in decompiled output",
+  "tags": ["elf", "ghidra", "multi-function", "control-flow", "data-flow", "intermediate"],
+  "fundamentals": {
+    "content": "## Multi-Function Reverse Engineering\n\n### Moving Beyond Single-Function Challenges\n\nReal binaries don't put all their logic in `main()`. Complex programs spread logic across dozens of functions, each transforming data before passing it along. To reverse engineer these, you need to:\n\n1. **Map the call graph** — understand which functions call which\n2. **Track data flow** — follow variables as they're passed between functions\n3. **Understand each function's role** — what transformation does it apply?\n\n### Call Graph Analysis in Ghidra\n\nGhidra provides several tools for understanding function relationships:\n\n- **Function Call Trees** (`Window → Function Call Trees`): Shows callers and callees of the selected function as a tree\n- **Function Call Graph** (`Window → Function Call Graph`): Visual graph of function relationships\n- **Cross-references** (right-click → References): Find all locations that call a function\n\n### Tracing Data Flow\n\nWhen a value is passed through multiple functions:\n\n```c\nvoid main() {\n    char buf[64];\n    init_data(buf);        // Step 1: Initialize\n    transform_stage1(buf); // Step 2: First transformation\n    transform_stage2(buf); // Step 3: Second transformation\n    check_result(buf);     // Step 4: Validate\n}\n```\n\nYou need to analyze each function in order to understand the complete transformation pipeline. Key questions:\n- What does `init_data` put into the buffer?\n- How does `transform_stage1` modify it?\n- What additional changes does `transform_stage2` make?\n- What does `check_result` compare against?\n\n### Renaming and Retyping in Ghidra\n\nAs you understand each function, **rename** it (press `L`) to something meaningful:\n- `FUN_00401230` → `xor_decode`\n- `DAT_00404020` → `encoded_flag`\n- `local_28` → `decoded_buffer`\n\nThis dramatically improves readability as you trace complex logic. Similarly, **retype** variables (press `Ctrl+L`) when Ghidra guesses wrong — changing a `long` to a `char[8]` can reveal string operations.\n\n### Recognizing Common Code Patterns\n\n| Pattern | What It Means |\n|---------|---------------|\n| `for (i=0; i<len; i++) buf[i] ^= key[i%klen]` | XOR cipher |\n| `buf[i] = table[input[i]]` | Substitution cipher / lookup table |\n| `result = (val << n) \\| (val >> (32-n))` | Bit rotation (common in hashing) |\n| `for (i=0; i<len/2; i++) swap(buf[i], buf[len-1-i])` | String reversal |\n| `val = val * 0x41C64E6D + 0x3039` | Linear Congruential Generator (PRNG) |",
+    "toolReferences": [
+      {
+        "tool": "Ghidra",
+        "commands": [
+          "Window → Function Call Trees — view caller/callee hierarchy",
+          "Window → Function Call Graph — visual call graph",
+          "L key — rename selected function or variable",
+          "Ctrl+L — retype a variable",
+          "Right-click → References → Find References to — trace usage across functions"
+        ]
+      },
+      {
+        "tool": "GDB",
+        "commands": [
+          "b function_name — break at function entry to inspect arguments",
+          "bt — show backtrace (call stack) to understand how you got here",
+          "finish — run until current function returns, then show return value",
+          "display/x $rdi — auto-display first argument on every break"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Don't try to understand everything at once. Start from main() and map out which functions are called and in what order.",
+      "Rename functions and variables as you understand them. `FUN_00401230` becomes much clearer when you call it `decode_flag`.",
+      "Trace how data flows through the function chain. What buffer is initialized, how is it transformed, and where does the final comparison happen?",
+      "Some functions might manipulate the data in place (modifying the buffer directly), while others might return new values. Pay attention to pointer arguments.",
+      "Use GDB to break at each function entry and inspect the arguments. Compare what you see in memory with your static analysis predictions.",
+      "The transformations might need to be reversed (inverted) to go from the encoded data to the flag. Think about which operations are reversible."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A binary processes the flag through multiple functions, each applying a different transformation. You need to trace the entire pipeline and either replay the operations or reverse them to extract the flag.\n\n**Approach:** Use Ghidra to decompile all relevant functions, map the data flow, understand each transformation, and write a Python script that reproduces or reverses the process.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Map the function call structure",
+        "command": "Ghidra: Analyze main() → identify all function calls in order",
+        "explanation": "Starting from main(), list every function call and its arguments. The main function typically initializes data, calls transformation functions in sequence, and then performs a final check or output. Document the call order — this is your transformation pipeline."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Analyze each transformation function",
+        "command": "Ghidra: Decompile each called function and understand its operation",
+        "explanation": "Decompile each function in the call chain. For each one, determine: (1) What are its inputs? (2) What operation does it perform? (3) What does it output? Rename functions as you understand them (e.g., `FUN_004011f0` → `xor_with_key`). Some functions might perform XOR, substitution, bit manipulation, or mathematical operations on the data buffer."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Extract encoded data and keys",
+        "command": "Ghidra: Navigate to data references → copy byte arrays from .rodata",
+        "explanation": "The binary contains encoded data and possibly keys in the `.rodata` section. Follow the data references from the decompiled code to find these arrays. Copy the byte values for use in your solution script. Pay attention to array sizes and data types."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Implement the transformation chain in Python",
+        "command": "python3 solve.py",
+        "explanation": "Write a Python script that reproduces the exact sequence of transformations from the binary. Apply each function's operation in the same order, using the same encoded data and keys. If the binary encodes data and you need to decode, you may need to reverse certain operations (e.g., XOR is self-inverting, but addition requires subtraction)."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Validate with dynamic analysis",
+        "command": "gdb ./ouija → break at each function → verify intermediate values",
+        "explanation": "To confirm your static analysis is correct, use GDB to break at each function and compare the intermediate values with what your Python script produces. If they match at every stage, your understanding is correct and the final output is the flag."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "rebuilding",
+    "nextChallengeId": "ghostintheshellcode"
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "challengeId": "behind-the-scenes",
+  "name": "Behind the Scenes",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/Behind%20the%20Scenes",
+  "difficulty": "very_easy",
+  "estimatedTime": "30 min - 1 hour",
+  "keyTakeaway": "Binary triage fundamentals — using file, strings, and ltrace to extract hidden information from ELF binaries without a disassembler",
+  "tags": ["elf", "strings", "ltrace", "file", "triage", "linux"],
+  "fundamentals": {
+    "content": "## Binary Triage: Your First Steps with Any Unknown Binary\n\n### Why Triage Matters\n\nBefore you ever open Ghidra or GDB, the first thing a reverse engineer does with any binary is **triage** — a quick series of checks to understand what you're dealing with. This phase takes 2-5 minutes and answers critical questions:\n\n- What platform and architecture is this binary for?\n- Is it statically or dynamically linked?\n- Has the symbol table been stripped?\n- Are there any obvious strings (passwords, URLs, flags)?\n- What library calls does it make at runtime?\n\n### The Triage Workflow\n\n**Step 1: `file` command**\n\nThe `file` command reads the magic bytes and headers of a binary to identify its type:\n\n```\n$ file mystery_binary\nmystery_binary: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, not stripped\n```\n\nKey information extracted:\n- **ELF 64-bit LSB** — Linux executable, 64-bit, little-endian\n- **pie executable** — Position Independent Executable (ASLR-compatible)\n- **dynamically linked** — Uses shared libraries (libc, etc.)\n- **not stripped** — Symbol table is intact (function names preserved)\n\n**Step 2: `strings` command**\n\nThe `strings` utility extracts all printable character sequences from a binary. Hardcoded passwords, flag formats, error messages, and debug strings often survive compilation:\n\n```\n$ strings binary | grep -i flag\n$ strings binary | grep -i password\n$ strings binary | grep 'HTB{'\n```\n\n**Step 3: `ltrace` — Library Call Tracing**\n\n`ltrace` intercepts and records dynamic library calls made by a process. This is incredibly powerful because it shows you:\n- String comparisons (`strcmp`, `strncmp`) — often reveals expected passwords\n- Memory allocations (`malloc`, `calloc`)\n- I/O operations (`fopen`, `printf`, `puts`)\n\n```\n$ ltrace ./binary\nstrcmp(\"user_input\", \"s3cr3t_p4ss\") = -1\n```\n\nIf a binary uses `strcmp` to check a password, `ltrace` will show both arguments — giving you the answer without any disassembly.\n\n### When Triage Solves the Challenge\n\nMany very_easy reversing challenges can be solved entirely with triage tools. This is intentional — it teaches you that **the simplest approach should always be tried first**. Even on harder challenges, triage provides context that makes deeper analysis faster.",
+    "toolReferences": [
+      {
+        "tool": "file",
+        "commands": [
+          "file binary — identify file type, architecture, and linking"
+        ]
+      },
+      {
+        "tool": "strings",
+        "commands": [
+          "strings binary — extract all printable strings",
+          "strings -n 10 binary — extract strings at least 10 chars long",
+          "strings binary | grep -i 'htb\\|flag\\|pass' — search for interesting strings"
+        ]
+      },
+      {
+        "tool": "ltrace",
+        "commands": [
+          "ltrace ./binary — trace library calls at runtime",
+          "ltrace -s 200 ./binary — increase string display length to 200 chars",
+          "ltrace -e strcmp ./binary — trace only strcmp calls"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start by running `file` on the binary. What architecture is it? Is it stripped? The answers tell you what tools will work.",
+      "Try running `strings` on the binary and grep for common flag patterns. Not all challenges hide their strings well.",
+      "Run the binary and observe its behavior. Does it ask for input? Does it print anything?",
+      "Use `ltrace` to trace the library calls. If the binary compares your input against something, ltrace will reveal both sides of the comparison.",
+      "Pay attention to the sequence of `strcmp` or `strncmp` calls in ltrace output — the expected string is one of the arguments."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** You're given an ELF binary that performs some kind of check. Your goal is to discover the hidden flag by analyzing the binary's behavior.\n\n**Approach:** This is a classic triage challenge. We'll use `file`, `strings`, and `ltrace` to understand and solve the binary without ever opening a disassembler.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify the binary type",
+        "command": "file ./behindthescenes",
+        "explanation": "Running `file` reveals this is a 64-bit ELF executable, dynamically linked, and not stripped. Dynamically linked means it uses shared libraries — which means `ltrace` will work. Not stripped means function names are preserved, which helps in disassembly if needed."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Search for strings in the binary",
+        "command": "strings ./behindthescenes",
+        "explanation": "Run `strings` to look for anything interesting. You'll find standard library strings and potentially some program-specific strings. Look for anything that resembles a flag format (`HTB{...}`) or password strings. The strings output gives initial clues about what the binary does."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Run the binary to observe behavior",
+        "command": "./behindthescenes",
+        "explanation": "Execute the binary to see what it does. It may print a usage message, ask for input, or produce output. Understanding the expected interaction helps you know what to look for in the trace."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Trace library calls with ltrace",
+        "command": "ltrace ./behindthescenes",
+        "explanation": "Run the binary under `ltrace` to intercept all library calls. The key insight is that the binary uses `strncmp` to compare input against a hardcoded value. The `ltrace` output reveals the expected string by showing both arguments to the comparison function. The flag is constructed from string segments that are compared using `strncmp` calls. By reading the expected comparison values from the ltrace output, you can reconstruct the complete flag."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Provide the correct input to get the flag",
+        "command": "./behindthescenes <correct_input>",
+        "explanation": "Using the string revealed by `ltrace`, provide it as input. The binary validates the input and prints the flag. This demonstrates why `ltrace` is the first tool to reach for when a binary uses standard library string functions for validation — it makes the comparison completely transparent."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": null,
+    "nextChallengeId": "dvho"
+  }
+}

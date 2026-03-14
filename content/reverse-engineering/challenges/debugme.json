@@ -1,0 +1,97 @@
+{
+  "challengeId": "debugme",
+  "name": "DebugMe",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/Debugme",
+  "difficulty": "medium",
+  "estimatedTime": "2 - 4 hours",
+  "keyTakeaway": "Anti-debugging bypass techniques — identifying and defeating ptrace detection, timing checks, and self-modifying code (XOR unpacking) that protect a binary from analysis",
+  "tags": ["anti-debugging", "ptrace", "self-modifying-code", "xor-unpacking", "gdb", "patching"],
+  "fundamentals": {
+    "content": "## Anti-Debugging Techniques and Bypass Methods\n\n### Why Binaries Fight Back\n\nAnti-debugging is a set of techniques that detect or prevent dynamic analysis. Malware uses them to hinder reverse engineering. CTF challenges use them to add an extra layer of difficulty. Understanding these techniques is **critical for real-world malware analysis** — you will encounter them constantly.\n\n### Technique 1: ptrace Detection (Linux)\n\nOn Linux, a process can only be traced by one debugger at a time. The `ptrace(PTRACE_TRACEME, 0, 0, 0)` syscall attempts to attach the debugger role to the process itself. If the call succeeds (returns 0), no debugger is attached. If it fails (returns -1), a debugger is already tracing the process:\n\n```c\nif (ptrace(PTRACE_TRACEME, 0, 0, 0) == -1) {\n    printf(\"Debugger detected!\\n\");\n    exit(1);\n}\n```\n\n**Bypass methods:**\n- **Patch the binary:** NOP out the `ptrace` call or change the conditional jump after it\n- **LD_PRELOAD hooking:** Create a shared library that overrides `ptrace` to always return 0:\n  ```c\n  // fake_ptrace.c\n  long ptrace(int request, ...) { return 0; }\n  ```\n  ```bash\n  gcc -shared -o fake_ptrace.so fake_ptrace.c\n  LD_PRELOAD=./fake_ptrace.so gdb ./binary\n  ```\n- **GDB command:** `catch syscall ptrace` then `set $rax = 0` to fake success\n\n### Technique 2: IsDebuggerPresent (Windows)\n\nWindows provides a direct API:\n```c\nif (IsDebuggerPresent()) {\n    ExitProcess(1);\n}\n```\n\nThis checks the `BeingDebugged` flag in the Process Environment Block (PEB).\n\n**Bypass:** In x64dbg, modify the PEB's `BeingDebugged` byte to 0, or patch the `IsDebuggerPresent` call to always return 0.\n\n### Technique 3: Timing Checks\n\nDebuggers slow execution. A binary can measure time between two points — if the elapsed time is too long, a debugger is present:\n\n```c\nclock_t start = clock();\n// ... code ...\nclock_t end = clock();\nif ((end - start) > threshold) {\n    exit(1);  // Too slow — must be debugging\n}\n```\n\n**Bypass:** Patch the comparison to use a very large threshold, or NOP out the timing check entirely.\n\n### Technique 4: Self-Modifying Code (XOR Unpacking)\n\nThe most interesting anti-analysis technique. The binary's actual code is XOR-encrypted in the `.text` section. At runtime, a decryption stub XORs the code back to its original form before executing it:\n\n```c\nvoid unpack() {\n    unsigned char *code = (unsigned char *)&protected_function;\n    for (int i = 0; i < code_size; i++) {\n        code[i] ^= xor_key;\n    }\n}\n```\n\nStatic analysis sees only encrypted garbage. You must either:\n- **Run until after unpacking:** Set a breakpoint after the unpack routine completes, then analyze the decrypted code\n- **Manually decrypt:** Identify the XOR key and decrypt the section offline\n- **Dump from memory:** After the binary decrypts itself, dump the process memory to get the clean code\n\n### Technique 5: /proc/self/status Check\n\nLinux processes can check their own tracing status:\n```c\nFILE *f = fopen(\"/proc/self/status\", \"r\");\n// Parse for \"TracerPid: 0\" — non-zero means being debugged\n```\n\n**Bypass:** Patch the fopen call or the comparison, or use GDB to modify the parsed value.\n\n### GDB Scripting for Anti-Debug Bypass\n\nGDB scripts automate bypass of multiple checks:\n```\n# anti_debug_bypass.gdb\nset follow-fork-mode child\ncatch syscall ptrace\ncommands\n  set $rax = 0\n  continue\nend\nbreak *0x401234  # Break after self-modifying code completes\nrun\n```\n\nThis approach scales — you can add bypass commands for each anti-debug technique the binary uses.\n\n### The Analysis Strategy\n\n1. **Run the binary normally** first to see its behavior\n2. **Attach GDB** and observe where it detects you\n3. **Identify each anti-debug check** through static analysis in Ghidra\n4. **Bypass each check** using the appropriate technique\n5. **Analyze the unprotected logic** once all checks are defeated\n6. The actual challenge (flag extraction) only becomes accessible after bypassing all protections",
+    "toolReferences": [
+      {
+        "tool": "GDB",
+        "commands": [
+          "catch syscall ptrace → commands → set $rax = 0 → continue → end — auto-bypass ptrace",
+          "set *(char*)0xADDR = 0x90 — NOP out an instruction (patch in memory)",
+          "dump memory dump.bin 0xSTART 0xEND — dump decrypted code from memory",
+          "source bypass.gdb — load anti-debug bypass script",
+          "info proc mappings — show memory regions (find unpacked code)"
+        ]
+      },
+      {
+        "tool": "Ghidra",
+        "commands": [
+          "Search → For Strings → 'ptrace' or 'TracerPid' — find anti-debug checks",
+          "Search for calls to clock(), gettimeofday() — find timing checks",
+          "Identify XOR loops that target .text section addresses — find self-modifying code",
+          "Right-click → Patch Instruction — modify anti-debug conditional jumps"
+        ]
+      },
+      {
+        "tool": "LD_PRELOAD",
+        "commands": [
+          "gcc -shared -fPIC -o hook.so hook.c — compile preload hook library",
+          "LD_PRELOAD=./hook.so ./binary — run binary with hooked functions",
+          "Override ptrace, clock, IsDebuggerPresent — common functions to hook"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Run the binary outside a debugger first. Then try running it under GDB. If it behaves differently (crashes, exits, prints warnings), it has anti-debugging.",
+      "Load the binary in Ghidra and search for calls to `ptrace`. A `ptrace(PTRACE_TRACEME)` call near the start is the most common Linux anti-debug check.",
+      "Look for self-modifying code: a loop that XORs a memory region in the `.text` section. This decrypts the real code at runtime.",
+      "To bypass ptrace, either NOP it out in the binary or use GDB's `catch syscall ptrace` with `set $rax = 0` to fake success.",
+      "After bypassing the anti-debug checks, set a breakpoint AFTER the self-modifying code finishes. Then you can analyze the decrypted functions.",
+      "If the binary has XOR-encrypted code, you can also extract the XOR key from the decryption loop and decrypt the section offline in Python."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A binary is protected by multiple anti-debugging techniques. It detects debuggers and exits, and its core logic is encrypted with XOR until runtime. You must bypass the protections and reverse the underlying logic to extract the flag.\n\n**Approach:** Identify each anti-debug mechanism, bypass them systematically using GDB scripting and binary patching, then analyze the decrypted code to find the flag.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Observe normal vs debugged behavior",
+        "command": "./debugme && gdb -q -ex run ./debugme",
+        "explanation": "Run the binary normally — it may prompt for input or display output. Then run it under GDB — if it exits immediately, prints a warning, or behaves differently, anti-debugging is active. This confirms the presence of debug detection and tells you what behaviors to watch for."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Identify anti-debug techniques in Ghidra",
+        "command": "Ghidra: Import → Analyze → Search for ptrace, clock, /proc/self references",
+        "explanation": "Load the binary in Ghidra and search for known anti-debug indicators. Look for: (1) `ptrace(PTRACE_TRACEME)` calls, (2) reads from `/proc/self/status`, (3) timing functions like `clock()` or `gettimeofday()`, (4) XOR loops that modify memory in the `.text` section (self-modifying code). Document each technique and its location."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Bypass ptrace detection with GDB scripting",
+        "command": "gdb -q ./debugme → catch syscall ptrace → commands → set $rax = 0 → continue → end",
+        "explanation": "Use GDB's syscall catching to intercept the `ptrace` syscall. When triggered, force the return value (`$rax`) to 0, making the binary think no debugger is attached. This bypass works dynamically without modifying the binary on disk."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Handle self-modifying code",
+        "command": "Set breakpoint after the XOR decryption loop completes",
+        "explanation": "Identify the XOR decryption routine's end address in Ghidra. Set a breakpoint there in GDB. When the breakpoint hits, the binary has decrypted its own code and the real logic is now in memory. You can dump the decrypted memory region or continue analysis in GDB. Use `info proc mappings` to identify the code region, then `dump memory clean.bin 0xSTART 0xEND` to save it."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Analyze the decrypted logic",
+        "command": "Analyze the decrypted code in GDB or load the dump into Ghidra",
+        "explanation": "With the self-modifying code decrypted, you can now see the actual program logic. This typically contains the real validation or flag computation. Step through it in GDB or load the memory dump into Ghidra as a raw binary for static analysis. The flag may be computed through operations on embedded data, or it may be revealed through a validation check."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Extract the flag",
+        "command": "Complete the analysis of the decrypted logic → extract or compute the flag",
+        "explanation": "Once the anti-debugging layers are stripped away, the core challenge is standard reverse engineering — understanding a validation algorithm and either extracting the flag directly or computing it. The anti-debug techniques are the outer shell; the real puzzle is inside. This challenge teaches the essential skill of peeling away protection layers before reaching the actual analysis target — exactly what malware analysts do daily."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "lootstash",
+    "nextChallengeId": "bombs-landed"
+  }
+}

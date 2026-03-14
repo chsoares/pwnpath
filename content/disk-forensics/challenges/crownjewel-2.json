@@ -1,0 +1,105 @@
+{
+  "challengeId": "crownjewel-2",
+  "name": "CrownJewel-2",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/CrownJewel-2",
+  "difficulty": "medium",
+  "estimatedTime": "3-4 hours",
+  "keyTakeaway": "Active Directory forensics — extracting and analyzing ntds.dit to identify compromised domain accounts and credential theft",
+  "tags": ["active-directory", "ntds-dit", "credential-theft", "secretsdump", "domain-controller", "dcsync"],
+  "fundamentals": {
+    "content": "## Active Directory Database Forensics (ntds.dit)\n\n### What Is ntds.dit?\n\nThe `ntds.dit` file is the **Active Directory database** — it contains every user account, computer account, group membership, and password hash in the domain. It is the single most critical file on a Domain Controller.\n\nLocation: `C:\\Windows\\NTDS\\ntds.dit`\n\nThe file uses the **Extensible Storage Engine (ESE)** database format (same engine used by Exchange). It cannot be simply opened — it requires specialized tools to parse the database tables and extract credentials.\n\n### Why Attackers Target ntds.dit\n\nExtracting ntds.dit gives an attacker:\n- **NTLM hashes** for every domain account (including Domain Admins)\n- **Kerberos keys** for ticket-forging attacks (Golden/Silver Tickets)\n- **Password history** (if configured) for password pattern analysis\n- **Complete user enumeration** of the entire domain\n\n### Methods Attackers Use to Obtain ntds.dit\n\n| Method | Description | Forensic Evidence |\n|--------|------------|-------------------|\n| **Volume Shadow Copy** | `vssadmin create shadow /for=C:` then copy ntds.dit from the shadow | Event ID 8222 (VSS), file copy evidence |\n| **ntdsutil IFM** | `ntdsutil \"activate instance ntds\" ifm \"create full C:\\temp\"` | ntdsutil process in Prefetch, IFM directory creation |\n| **DCSync** | `mimikatz lsadump::dcsync /domain:corp.local /all` | Event ID 4662 (DS-Replication-Get-Changes) |\n| **Disk copy** | Direct copy while DC is offline or via backup | Physical access or backup tampering evidence |\n\n### Decrypting ntds.dit\n\nThe ntds.dit credentials are encrypted with the **Boot Key (SYSKEY)** stored in the `SYSTEM` registry hive. To extract hashes, you need both:\n1. `ntds.dit` — the AD database\n2. `SYSTEM` hive — contains the boot key for decryption\n\n### DCSync Detection\n\nDCSync is the most stealthy method because it doesn't touch the filesystem. It abuses the Domain Controller replication protocol (DRS) to request password data. Detection relies on:\n- **Event ID 4662** with properties `{1131f6aa-9c07-11d1-f79f-00c04fc2dcd2}` (DS-Replication-Get-Changes)\n- **Event ID 4662** with properties `{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}` (DS-Replication-Get-Changes-All)\n- The requesting account should NOT be a Domain Controller computer account",
+    "toolReferences": [
+      {
+        "tool": "secretsdump.py (Impacket)",
+        "commands": [
+          "secretsdump.py -ntds ntds.dit -system SYSTEM LOCAL (extract all hashes)",
+          "secretsdump.py -ntds ntds.dit -system SYSTEM -outputfile hashes LOCAL (save to file)",
+          "secretsdump.py -ntds ntds.dit -system SYSTEM -just-dc-ntlm LOCAL (NTLM hashes only)",
+          "secretsdump.py -ntds ntds.dit -system SYSTEM -just-dc-user administrator LOCAL (single user)"
+        ]
+      },
+      {
+        "tool": "esentutl / NTDSXtract",
+        "commands": [
+          "esentutl.py -t ntds.dit (list ESE database tables)",
+          "dsusers.py ntds.dit.export/datatable.4 ntds.dit.export/link_table.7 --syshive SYSTEM --passwordhashes --lmoutfile lm.out --ntoutfile nt.out",
+          "dscomputers.py ntds.dit.export/datatable.4 computer_list.csv"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "You'll likely have the ntds.dit database and SYSTEM registry hive — these are the two pieces needed to extract all domain credentials.",
+      "Use secretsdump.py from Impacket to extract password hashes. You need both ntds.dit and the SYSTEM hive.",
+      "Look for evidence of HOW the ntds.dit was obtained — check for Volume Shadow Copy creation events, ntdsutil execution in Prefetch, or DCSync replication events.",
+      "Event ID 4662 with specific replication GUIDs indicates a DCSync attack. Check if the requesting account was a legitimate DC.",
+      "After extracting hashes, look for patterns: accounts with identical hashes indicate password reuse, empty LM hashes are expected on modern systems.",
+      "Check the Security event log for Event ID 8222 (VSS shadow copy creation) which may indicate the attacker used the VSS method to access ntds.dit."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A Domain Controller has been compromised and there's evidence that the Active Directory database (ntds.dit) was exfiltrated. You need to determine how the database was obtained, what credentials were exposed, and the full scope of the compromise.\n\n**Critical files:**\n\n| File | Purpose |\n|------|--------|\n| ntds.dit | Active Directory database with all account hashes |\n| SYSTEM | Registry hive containing the boot key for decryption |\n| SECURITY | Registry hive with cached domain credentials |\n| Security.evtx | Event log with access and replication events |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify the ntds.dit extraction method",
+        "command": "Check event logs for VSS creation (Event ID 8222) or ntdsutil (Prefetch)",
+        "explanation": "First, determine how the attacker obtained ntds.dit. Check for: (1) Volume Shadow Copy creation events (Event ID 8222 in System log), (2) ntdsutil.exe in Prefetch files (indicates IFM backup creation), (3) Event ID 4662 with replication GUIDs (indicates DCSync). The method reveals the attacker's sophistication and access level."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Extract password hashes from ntds.dit",
+        "command": "secretsdump.py -ntds ntds.dit -system SYSTEM -outputfile domain_hashes LOCAL",
+        "explanation": "Use secretsdump.py to extract all credential material from ntds.dit. This requires both the ntds.dit file and the SYSTEM registry hive (for the boot key). The output includes: NTLM hashes for all accounts, Kerberos keys, and password history if configured. This shows exactly what the attacker obtained."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Analyze the scope of exposed accounts",
+        "command": "Review domain_hashes.ntds for high-privilege accounts",
+        "explanation": "Examine the extracted hashes to assess the damage. Count: (1) Total domain accounts exposed, (2) Domain Admin accounts, (3) Service accounts (often have passwords that never change), (4) Computer accounts. Domain Admins and service accounts with NTLM hashes give the attacker complete domain control."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Identify password reuse across accounts",
+        "command": "Sort hashes and identify duplicate NTLM hashes across different accounts",
+        "explanation": "Accounts with identical NTLM hashes share the same password. This is critical because: if one account's password is cracked, all accounts with that hash are also compromised. Common patterns include admin accounts sharing passwords with their regular user accounts, or service accounts all using the same password."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Check for DCSync indicators in event logs",
+        "command": "Filter Security.evtx for Event ID 4662 with DS-Replication-Get-Changes properties",
+        "explanation": "Event ID 4662 with Object Type GUIDs `{1131f6aa-9c07-11d1-f79f-00c04fc2dcd2}` or `{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}` indicates directory replication requests. If the requesting account is NOT a Domain Controller computer account (e.g., it's a compromised user account), this confirms a DCSync attack. Record the account name and timestamp."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Examine VSS-based extraction evidence",
+        "command": "Search for vssadmin and shadow copy artifacts in event logs and filesystem",
+        "explanation": "If the attacker used Volume Shadow Copies: (1) Event ID 8222 in the System log shows shadow copy creation, (2) Look for copies of ntds.dit or SYSTEM hive in unusual locations (C:\\temp\\, user directories), (3) Check if shadow copies were deleted after extraction (`vssadmin delete shadows`). The shadow copy timestamp is the extraction time."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Determine the initial compromise of the Domain Controller",
+        "command": "Analyze logon events (Event ID 4624) to the DC around the extraction time",
+        "explanation": "How did the attacker get access to the DC in the first place? Check for: (1) RDP logons from unexpected IPs (Type 10), (2) Network logons from compromised workstations (Type 3), (3) Pass-the-hash indicators, (4) Service account logons. The initial DC compromise is often the most critical finding for remediation."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Assess Kerberos ticket forging risk",
+        "command": "secretsdump.py -ntds ntds.dit -system SYSTEM -just-dc-user krbtgt LOCAL",
+        "explanation": "Extract the KRBTGT account hash specifically. If the attacker has the KRBTGT hash, they can create **Golden Tickets** — Kerberos tickets for any account that bypass normal authentication. The KRBTGT password must be changed TWICE (due to password history) to invalidate any forged tickets. This is the most severe outcome of ntds.dit compromise."
+      },
+      {
+        "stepNumber": 9,
+        "description": "Document remediation requirements",
+        "command": "Compile list of all exposed accounts and required password resets",
+        "explanation": "The final report must include: (1) Total accounts compromised, (2) Immediate password reset requirements (Domain Admins, KRBTGT, service accounts first), (3) Whether Golden/Silver Ticket attacks are possible, (4) Recommendations for KRBTGT double-reset, (5) All affected systems that need re-imaging. An ntds.dit compromise essentially means the entire domain is compromised."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "optinseltrace-2",
+    "nextChallengeId": "persistenceisfutile"
+  }
+}

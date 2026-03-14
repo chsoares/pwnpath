@@ -1,0 +1,87 @@
+{
+  "challengeId": "hunting",
+  "name": "Hunting",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/Hunting",
+  "difficulty": "easy",
+  "estimatedTime": "1 - 2 hours",
+  "keyTakeaway": "Windows PE reversing — analyzing a .exe in Ghidra, understanding PE structure, and tracing flag construction across functions",
+  "tags": ["windows", "pe", "ghidra", "functions", "cross-references", "x64dbg"],
+  "fundamentals": {
+    "content": "## Windows PE Binary Analysis\n\n### PE File Format Basics\n\nWindows executables use the **Portable Executable (PE)** format. Understanding its structure helps you navigate binaries in Ghidra:\n\n| Section | Purpose |\n|---------|--------|\n| `.text` | Executable code (functions) |\n| `.data` | Initialized global/static variables |\n| `.rdata` | Read-only data (strings, constants, import tables) |\n| `.bss` | Uninitialized data |\n| `.rsrc` | Resources (icons, dialogs, embedded files) |\n| `.reloc` | Relocation table for ASLR |\n\n### PE Headers in Ghidra\n\nWhen you import a PE file, Ghidra parses:\n- **DOS Header** — Legacy compatibility (`MZ` magic bytes)\n- **PE Header** — Machine type, number of sections, timestamp\n- **Optional Header** — Entry point address, image base, subsystem (GUI/Console)\n- **Import Table** — DLLs and functions the binary uses\n- **Export Table** — Functions the binary provides (if a DLL)\n\n### Tracing Flag Construction Across Functions\n\nHarder challenges don't store the flag as a single string. Instead, the flag is **constructed at runtime** by calling multiple functions that each contribute a piece:\n\n```c\nvoid build_part1(char *buf) { buf[0]='H'; buf[1]='T'; buf[2]='B'; buf[3]='{'; }\nvoid build_part2(char *buf) { buf[4]='r'; buf[5]='3'; ... }\n```\n\nTo solve this, you need to:\n1. Find the entry point or main function\n2. Trace which functions are called and in what order\n3. Understand what each function writes to the output buffer\n4. Reconstruct the full flag from all the pieces\n\n### Cross-References Are Your Best Friend\n\nIn Ghidra, right-clicking any function or variable and selecting **References → Show References to** reveals everywhere that item is used. This lets you:\n- Find all callers of a function\n- Track where a buffer is written to\n- Understand the data flow through the program\n\n### Windows API Calls to Watch For\n\n| API | Purpose |\n|-----|--------|\n| `MessageBoxA/W` | Display dialog — often shows success/failure messages |\n| `GetStdHandle` + `WriteConsoleA` | Console output |\n| `CreateFileA/W` | File operations |\n| `IsDebuggerPresent` | Anti-debugging check |\n| `VirtualAlloc` | Dynamic memory allocation (watch for shellcode) |",
+    "toolReferences": [
+      {
+        "tool": "Ghidra",
+        "commands": [
+          "Import .exe → Language: x86:LE:64:default (or 32-bit as appropriate)",
+          "Window → Symbol Table → Filter by 'Function' — browse all functions",
+          "Right-click → References → Show References to — trace callers/callees",
+          "Window → Imports — view imported DLL functions (Windows API usage)"
+        ]
+      },
+      {
+        "tool": "x64dbg",
+        "commands": [
+          "File → Open → select .exe — load binary for dynamic analysis",
+          "bp MessageBoxA — break when a message box is displayed",
+          "bp entry — break at program entry point",
+          "Step Over (F8) / Step Into (F7) — navigate through execution"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "This is a Windows PE file. You can analyze it in Ghidra on Linux — you don't need a Windows machine for static analysis.",
+      "Find the main function or entry point. Look for calls to other functions that seem to build or manipulate a string.",
+      "The flag is likely constructed piece by piece across multiple function calls. Trace each function to see what it contributes.",
+      "Use cross-references on the output buffer to find all functions that write to it.",
+      "If the flag is built from character assignments, read each assignment in order and concatenate the results."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** You're given a Windows executable that hides a flag across multiple functions. Your job is to reverse engineer the binary, trace the flag construction logic, and extract the complete flag.\n\n**Approach:** Use Ghidra to decompile the PE binary, identify the main function, trace function calls that build the flag, and reconstruct it from the decompiled code.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify the binary format",
+        "command": "file ./hunting.exe",
+        "explanation": "The `file` command confirms this is a PE32 or PE32+ executable for Windows. Note the architecture (32-bit or 64-bit) as this determines register naming and calling conventions in the disassembly."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Import into Ghidra and run analysis",
+        "command": "Ghidra: File → Import → hunting.exe → Auto Analyze",
+        "explanation": "Ghidra automatically detects the PE format and selects the appropriate processor module. Auto-analysis identifies functions, strings, cross-references, and imports. Check the Imports window to see which Windows APIs the binary uses — this reveals its capabilities."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Locate the main function",
+        "command": "Ghidra: Symbol Table → search for 'main' or follow entry()",
+        "explanation": "In PE binaries, the entry point calls the C runtime initialization, which eventually calls `main()` or `WinMain()`. Navigate to the entry point and follow the call chain until you reach the actual main function with the program logic."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Trace the flag construction functions",
+        "command": "Ghidra: Follow each function call from main() in the decompiler",
+        "explanation": "The main function calls several helper functions, each of which populates part of a character array. Decompile each function to see what characters it writes and at which positions in the buffer. Document the output of each function in order."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Reconstruct the flag from all function outputs",
+        "command": "python3 -c \"# Combine character assignments from each function...\"",
+        "explanation": "After analyzing all the helper functions, combine their character contributions in the correct order. Each function fills specific indices of the output buffer. Mapping all the index-to-character assignments gives you the complete flag string in HTB{...} format."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Verify the flag",
+        "command": "Submit the flag on HackTheBox",
+        "explanation": "Since this is a Windows binary and you may be analyzing on Linux, verification is done by submitting to HTB. If you have a Windows VM or Wine, you can also run the binary and provide the flag as input to confirm."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "simple-encryptor",
+    "nextChallengeId": "impossible-password"
+  }
+}

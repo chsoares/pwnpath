@@ -1,0 +1,97 @@
+{
+  "challengeId": "tear-or-dear",
+  "name": "Tear Or Dear",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/Tear%20Or%20Dear",
+  "difficulty": "medium",
+  "estimatedTime": "2 - 3 hours",
+  "keyTakeaway": ".NET reversing fundamentals — understanding why managed code decompiles almost perfectly and using DNSpy/ILSpy to recover near-original source code from .NET assemblies",
+  "tags": [".net", "dnspy", "ilspy", "cil", "managed-code", "windows"],
+  "fundamentals": {
+    "content": "## Reversing .NET Applications\n\n### Managed Code vs Native Code\n\nThe most important distinction in reverse engineering is between **native** and **managed** code:\n\n| Aspect | Native (C/C++) | Managed (.NET/Java) |\n|--------|----------------|---------------------|\n| Compilation | Compiled to machine code | Compiled to intermediate language |\n| Decompilation quality | Approximate (variable names lost, structure guessed) | Near-perfect (metadata preserved) |\n| Runtime | Runs directly on CPU | Runs on CLR/JVM |\n| Type information | Mostly stripped | Fully preserved |\n| Method names | Stripped unless debug build | Always preserved |\n\n.NET applications compile to **Common Intermediate Language (CIL)**, also called MSIL or IL. This intermediate representation is stored in the assembly (.exe or .dll) along with rich **metadata** — class names, method signatures, field names, and type information. Because of this metadata, .NET decompilers can reconstruct code that looks almost identical to the original C# source.\n\n### Why .NET Decompiles So Well\n\nWhen a C# developer writes:\n```csharp\npublic bool CheckPassword(string input) {\n    byte[] expected = { 0x48, 0x54, 0x42 };\n    for (int i = 0; i < input.Length; i++) {\n        if (input[i] != (char)(expected[i] ^ key[i]))\n            return false;\n    }\n    return true;\n}\n```\n\nThe compiled assembly preserves: the method name `CheckPassword`, parameter name `input`, local variable names, the `byte[]` type, and the control flow structure. A decompiler recovers almost exactly the original code — not pseudocode, but real, compilable C#.\n\n### .NET Reversing Tools\n\n**DNSpy** (Windows, open-source):\n- Decompiles .NET assemblies to C# with syntax highlighting\n- Built-in debugger — set breakpoints, inspect variables at runtime\n- Can **edit and recompile** methods directly in the GUI\n- Ideal for dynamic analysis of .NET applications\n\n**ILSpy** (Windows/Linux/Mac, open-source):\n- Pure decompiler — shows C# source from IL\n- Cross-platform (Avalonia-based UI or command-line)\n- Excellent decompilation quality\n- No debugging capabilities\n\n**dotPeek** (Windows, free from JetBrains):\n- Decompiler with source-server integration\n- Integrates with Visual Studio\n- Good for exploring large .NET frameworks\n\n### Key .NET Concepts for Reversing\n\n**Assemblies:** .NET executables (.exe) and libraries (.dll) are called assemblies. Each contains one or more **namespaces**, which contain **classes**.\n\n**Entry Point:** The `Main` method in the primary class. In DNSpy, expand the assembly tree → find the class with `Main()` → this is where execution starts.\n\n**String Handling:** .NET strings are Unicode (UTF-16). Watch for encoding conversions when the challenge involves byte-level operations.\n\n**Obfuscation:** Some .NET applications use obfuscators like ConfuserEx, Dotfuscator, or custom obfuscation. These rename methods to unreadable names, encrypt strings, and add anti-tampering checks. Even with obfuscation, the structure is recoverable — tools like `de4dot` can automatically deobfuscate many protections.\n\n### Common .NET Challenge Patterns\n\n1. **Direct string comparison** — flag checked via `string.Equals()` or `==`\n2. **Byte array transformation** — input bytes XORed/transformed and compared against expected array\n3. **Encrypted resources** — flag stored as an embedded resource, decrypted at runtime\n4. **Form-based validation** — WinForms/WPF app with a text box and \"Check\" button\n\n### The .NET Reversing Workflow\n\n1. Open the assembly in DNSpy or ILSpy\n2. Navigate to the entry point (`Main` method)\n3. Read the decompiled C# — it's almost source-quality\n4. Identify the validation/decryption logic\n5. Either extract the flag from the decompiled code or reimplement the logic\n6. If debugging is needed, use DNSpy's debugger to inspect runtime values",
+    "toolReferences": [
+      {
+        "tool": "DNSpy",
+        "commands": [
+          "File → Open → select .NET assembly — load for decompilation",
+          "Expand assembly tree → find Main() — locate entry point",
+          "Right-click method → Edit Method — modify and recompile C# code",
+          "Debug → Start Debugging — run with breakpoints and variable inspection",
+          "Right-click → Analyze — show method callers, callees, and dependencies"
+        ]
+      },
+      {
+        "tool": "ILSpy",
+        "commands": [
+          "File → Open → select assembly — decompile to C#",
+          "View → IL Language — switch between C# and raw IL views",
+          "Search bar — search across all types, methods, and strings",
+          "File → Save Code — export decompiled source to .cs files"
+        ]
+      },
+      {
+        "tool": "de4dot",
+        "commands": [
+          "de4dot assembly.exe — auto-detect and remove obfuscation",
+          "de4dot assembly.exe -p confuserex — specify the obfuscator type",
+          "de4dot assembly.exe -o cleaned.exe — output deobfuscated assembly"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Check the file type. If it's a .NET assembly, you'll see references to the CLR or 'PE32 executable' with 'Mono/.Net assembly' in the file output.",
+      "Use DNSpy or ILSpy instead of Ghidra for .NET binaries. The decompilation quality is dramatically better — you get real C# source code.",
+      "Find the Main() method and follow the program flow. The validation logic is likely in a method called from Main or triggered by a button click.",
+      "The decompiled code reads almost like original source. Look for string comparisons, byte array operations, or decryption routines.",
+      "If the application is a WinForms app, look for button click event handlers — the validation logic is typically in the 'Check' or 'Submit' button handler.",
+      "Pay attention to encoding — .NET strings are UTF-16. If byte operations are involved, check whether the code converts between string and byte[] representations."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** You are given a .NET application that requires a specific input to reveal the flag. Unlike native binaries, .NET applications decompile to near-perfect C# source code, making analysis significantly more straightforward once you use the right tools.\n\n**Approach:** Open the assembly in DNSpy or ILSpy, read the decompiled C# code, identify the validation logic, and extract or compute the expected input.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Identify the binary as a .NET assembly",
+        "command": "file challenge.exe && strings challenge.exe | grep -i 'mscoree\\|clr\\|System\\.'",
+        "explanation": "The `file` command identifies the binary as a PE32 executable with .NET/Mono assembly references. Strings like `mscoree.dll`, `System.Runtime`, or `System.Windows.Forms` confirm it's a .NET application. This means Ghidra is the wrong tool — use a .NET-specific decompiler for much better results."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Open in DNSpy and navigate to the entry point",
+        "command": "DNSpy: File → Open → challenge.exe → expand assembly tree → find Main()",
+        "explanation": "DNSpy loads the assembly and decompiles all classes to C#. Expand the namespace tree in the left panel to find the main class. The `Main()` method shows the program's entry point. For WinForms applications, also look for `Form_Load` and button click event handlers."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Read the decompiled validation logic",
+        "command": "DNSpy: Navigate to the validation method — read the C# code",
+        "explanation": "The decompiled code reveals the exact validation algorithm in readable C#. This typically involves reading user input, applying transformations (XOR, encoding, hashing), and comparing against expected values. Because .NET preserves method names, variable names, and types, you can understand the logic quickly."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Extract the expected values and reverse the logic",
+        "command": "Read the expected byte array or string from the decompiled code",
+        "explanation": "The validation function compares transformed input against hardcoded expected values. Copy these values from the decompiled source. Then implement the inverse transformation: if the code XORs input bytes with a key before comparing, XOR the expected values with the same key to recover the original input."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Compute the flag",
+        "command": "python3 -c \"expected = [...]; key = [...]; print(''.join(chr(e ^ k) for e, k in zip(expected, key)))\"",
+        "explanation": "Apply the reversed logic to compute the flag. Alternatively, you can use DNSpy's Edit Method feature to patch the validation to print the expected values directly, or use its debugger to set a breakpoint after the expected values are loaded and inspect them in memory."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Verify the flag",
+        "command": "Run the application and enter the recovered flag",
+        "explanation": "Run the application (in a Windows VM or with Mono on Linux) and provide the computed input. The application confirms success and may display additional information. This challenge demonstrates the massive advantage .NET decompilers have over native disassemblers — what takes hours with Ghidra takes minutes with DNSpy."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "ghostintheshellcode",
+    "nextChallengeId": "lootstash"
+  }
+}

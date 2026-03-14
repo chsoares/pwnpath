@@ -23,8 +23,8 @@
       "name": "Disk & Filesystem Forensics",
       "description": "Investigate disk images, recover deleted files, analyze filesystem artifacts, and trace user activity through registry hives and event logs.",
       "icon": "disk",
-      "status": "coming_soon",
-      "challengeCount": 0,
+      "status": "available",
+      "challengeCount": 12,
       "focus": ["Autopsy", "FTK", "Registry Analysis", "Event Logs"]
     },
     {
@@ -41,8 +41,8 @@
       "name": "Malware Analysis",
       "description": "Perform static and dynamic analysis of malicious samples. Understand packing, obfuscation, C2 communication, and persistence mechanisms.",
       "icon": "malware",
-      "status": "coming_soon",
-      "challengeCount": 0,
+      "status": "available",
+      "challengeCount": 12,
       "focus": ["Static Analysis", "Dynamic Analysis", "Behavioral Analysis"]
     },
     {
@@ -50,8 +50,8 @@
       "name": "Reverse Engineering",
       "description": "Disassemble and decompile binaries to understand their behavior. Master tools like Ghidra, IDA, and radare2 to analyze compiled code and uncover hidden logic.",
       "icon": "reverse",
-      "status": "coming_soon",
-      "challengeCount": 0,
+      "status": "available",
+      "challengeCount": 16,
       "focus": ["Ghidra", "IDA", "Decompilation", "Assembly"]
     },
     {
@@ -59,8 +59,8 @@
       "name": "Binary Exploitation",
       "description": "Exploit software vulnerabilities through buffer overflows, ROP chains, heap manipulation, and format string attacks. Learn to bypass modern protections like ASLR, NX, and stack canaries.",
       "icon": "exploit",
-      "status": "coming_soon",
-      "challengeCount": 0,
+      "status": "available",
+      "challengeCount": 20,
       "focus": ["Buffer Overflow", "ROP Chains", "Heap Exploitation", "pwntools"]
     }
   ]

@@ -1,0 +1,79 @@
+{
+  "challengeId": "shattered-tablet",
+  "name": "Shattered Tablet",
+  "source": "challenge",
+  "htbUrl": "https://app.hackthebox.com/challenges/Shattered%20Tablet",
+  "difficulty": "very_easy",
+  "estimatedTime": "30 min - 1 hour",
+  "keyTakeaway": "String comparison reversing — identifying hardcoded flag checks through static analysis of comparison functions",
+  "tags": ["elf", "ghidra", "strcmp", "string-comparison", "static-analysis"],
+  "fundamentals": {
+    "content": "## String Comparisons in Compiled Binaries\n\n### How Strings Are Stored\n\nWhen a C program contains a hardcoded string like:\n\n```c\nif (strcmp(input, \"secret_password\") == 0) { ... }\n```\n\nThe string `\"secret_password\"` is stored in the `.rodata` (read-only data) section of the ELF binary. The `strcmp` call is compiled into:\n\n```asm\nlea rdi, [input_buffer]     ; First argument: user input\nlea rsi, [rodata_string]    ; Second argument: hardcoded string\ncall strcmp                  ; Compare the two strings\ntest eax, eax               ; Check if return value is 0\njne wrong_label              ; Jump if strings don't match\n```\n\n### Character-by-Character Checks\n\nSome binaries avoid `strcmp` and instead check each character individually:\n\n```c\nif (input[0] == 'H' && input[1] == 'T' && input[2] == 'B' && input[3] == '{' ...) {\n    printf(\"Correct!\");\n}\n```\n\nIn the decompiler, this appears as a chain of comparisons against individual byte values. You can read each expected character from the constants in the decompiled code and reconstruct the full string.\n\n### Finding Strings in Ghidra\n\n**Defined Strings window** (`Window → Defined Strings`) shows all strings Ghidra identified in the binary. This is faster than running `strings` because Ghidra also shows cross-references — you can double-click a string to jump to where it's used in code.\n\n**Cross-references (xrefs)** are the key to connecting strings to logic. If you find a string like `\"Correct!\"`, its xrefs tell you which function prints it, and from there you can trace backward to find the validation logic.\n\n### The .rodata Section\n\nIn ELF binaries, constant data lives in `.rodata`. This includes:\n- String literals\n- Constant arrays\n- Jump tables for switch statements\n\nYou can examine this section directly: `objdump -s -j .rodata binary`",
+    "toolReferences": [
+      {
+        "tool": "Ghidra",
+        "commands": [
+          "Window → Defined Strings — list all strings with cross-references",
+          "Right-click string → References → Show References to — find where a string is used",
+          "Search → For Strings — search for specific string patterns",
+          "Navigation → Go To (.rodata section) — examine read-only data directly"
+        ]
+      },
+      {
+        "tool": "objdump",
+        "commands": [
+          "objdump -s -j .rodata binary — dump the read-only data section",
+          "objdump -d -M intel binary | grep -A5 'strcmp' — find strcmp call sites"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Run `strings` first. If the flag is stored as a single string, you might find it immediately.",
+      "If strings doesn't reveal the flag directly, load the binary in Ghidra and check the main() function's decompiled output.",
+      "Look for a series of character-by-character comparisons. Each comparison checks one byte of the expected input.",
+      "The expected characters might be scattered across multiple comparison statements. Read them in order to build the flag.",
+      "Check the Defined Strings window in Ghidra — strings in .rodata often include the expected input or parts of it."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** An ancient tablet has been shattered, and its secret message is locked inside a binary. You need to provide the correct string to recover the message.\n\n**Approach:** Use Ghidra to decompile the binary and read the string comparison logic to extract the expected input character by character.",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Triage the binary",
+        "command": "file ./tablet && strings ./tablet | grep -i htb",
+        "explanation": "Check the file type and search for obvious strings. The binary is a standard ELF executable. A quick grep for the flag format might not yield results if the flag is checked character-by-character rather than stored as a complete string."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Load in Ghidra and analyze main()",
+        "command": "Ghidra: Import → Analyze → Navigate to main()",
+        "explanation": "Import and auto-analyze the binary. Navigate to the `main` function in the decompiler view. The decompiled code shows the program reading user input and then validating it."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Identify the string validation pattern",
+        "command": "Ghidra: Read the if-statement chain in the decompiler",
+        "explanation": "The decompiled code reveals a series of comparisons checking individual characters of the input against expected values. Each comparison checks `input[N] == 'X'` for a specific character. The characters are compared using their ASCII values (displayed as hex in the decompiler, like `0x48` for 'H')."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Extract all expected characters",
+        "command": "python3 -c \"chars = [0x48, 0x54, 0x42, 0x7b, ...]; print(''.join(chr(c) for c in chars))\"",
+        "explanation": "Read each hex value from the comparison chain in order and convert them to ASCII characters using Python. The sequence of characters spells out the complete flag in `HTB{...}` format. Each index in the array corresponds to a position in the expected string."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Verify by running the binary with the flag",
+        "command": "./tablet",
+        "explanation": "Run the binary and provide the reconstructed string as input. The program validates each character and, finding them all correct, prints a success message confirming the flag."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "dvho",
+    "nextChallengeId": "simple-encryptor"
+  }
+}

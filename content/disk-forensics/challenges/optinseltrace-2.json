@@ -1,0 +1,99 @@
+{
+  "challengeId": "optinseltrace-2",
+  "name": "OpTinselTrace-2",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/OpTinselTrace-2",
+  "difficulty": "easy",
+  "estimatedTime": "2-3 hours",
+  "keyTakeaway": "Windows Shellbag forensics — reconstructing folder navigation history to trace attacker lateral movement and data access patterns",
+  "tags": ["shellbags", "windows-artifacts", "registry", "user-activity", "lateral-movement"],
+  "fundamentals": {
+    "content": "## Shellbag Analysis for Forensic Investigations\n\n### What Are Shellbags?\n\nShellbags are Windows registry artifacts that record **folder access and browsing preferences** in Windows Explorer. Every time a user opens a folder — locally, on a network share, or on removable media — Windows stores settings like window position, view type (icons, details, list), and sort order.\n\nThe forensic value is immense: Shellbags prove a user navigated to specific folders, even if those folders (or the media they were on) no longer exist.\n\n### Where Shellbags Are Stored\n\n| Registry Hive | Path | Content |\n|--------------|------|--------|\n| `UsrClass.dat` | `Local Settings\\Software\\Microsoft\\Windows\\Shell\\BagMRU` | Most folder access records |\n| `UsrClass.dat` | `Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags` | Window position/view settings |\n| `NTUSER.DAT` | `Software\\Microsoft\\Windows\\Shell\\BagMRU` | Additional folder records |\n| `NTUSER.DAT` | `Software\\Microsoft\\Windows\\Shell\\Bags` | Additional view settings |\n\n`UsrClass.dat` location: `C:\\Users\\<user>\\AppData\\Local\\Microsoft\\Windows\\UsrClass.dat`\n\n### What Shellbags Reveal\n\n- **Local folder access**: Which directories a user browsed (even deleted ones)\n- **Network share access**: UNC paths like `\\\\server\\share\\folder` prove network resource access\n- **Removable media**: USB drive folder structures are recorded and persist after removal\n- **ZIP file browsing**: Windows Explorer treats ZIP files as folders — Shellbags record browsing inside them\n- **Timestamps**: First and last interaction times with each folder\n\n### Why Shellbags Survive Cleanup\n\nShellbags are not cleared when:\n- Files or folders are deleted\n- USB drives are removed\n- Network shares are disconnected\n- The Recycle Bin is emptied\n\nThis makes them excellent evidence of historical access that the user (or attacker) cannot easily erase.\n\n### Shellbag Analysis in Practice\n\nCommon investigation patterns:\n1. **Data theft**: Shellbags show the attacker navigated to `\\\\fileserver\\finance\\payroll\\` proving they accessed sensitive directories\n2. **USB activity**: Shellbag entries for `D:\\` or `E:\\` paths with folder structures prove USB usage\n3. **Lateral movement**: Network path Shellbags show which remote systems were accessed",
+    "toolReferences": [
+      {
+        "tool": "SBECmd (Eric Zimmerman)",
+        "commands": [
+          "SBECmd.exe -d C:\\Users\\<user>\\AppData\\Local\\Microsoft\\Windows --csv . (parse Shellbags from UsrClass.dat)",
+          "SBECmd.exe --hive UsrClass.dat --csv . --csvf shellbags.csv (parse specific hive)",
+          "Sort output by LastInteractedWith timestamp for timeline analysis"
+        ]
+      },
+      {
+        "tool": "ShellBags Explorer (Eric Zimmerman)",
+        "commands": [
+          "GUI tool: File → Load offline hive → select UsrClass.dat",
+          "Tree view shows the complete folder hierarchy the user browsed",
+          "Click entries to see timestamps and access details",
+          "Filter by date range to focus on incident window"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "The key evidence source is the user's UsrClass.dat registry hive — it contains the Shellbag records showing folder navigation.",
+      "Use SBECmd or ShellBags Explorer to parse the Shellbag data. The tree view in ShellBags Explorer is particularly helpful for understanding the folder hierarchy.",
+      "Look for network share paths (\\\\server\\share) in the Shellbags — these indicate lateral movement or remote data access.",
+      "Pay attention to timestamps — the 'LastInteractedWith' time shows when the user last browsed each folder.",
+      "Look for folder paths that suggest sensitive data access: finance, HR, executive, or project-specific directories.",
+      "Cross-reference Shellbag timestamps with other evidence (event logs, Prefetch) to build a complete activity timeline."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** Part of the OpTinselTrace series. A compromised Windows workstation's registry artifacts have been collected. You need to analyze Shellbag data to determine what folders the attacker accessed, whether they browsed network shares, and what data they may have viewed or stolen.\n\n**Primary evidence:**\n\n| Artifact | Purpose |\n|----------|--------|\n| UsrClass.dat | Shellbag records (folder browsing history) |\n| NTUSER.DAT | Additional user artifacts |\n| Event logs | Corroborating timeline evidence |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Extract and parse the UsrClass.dat Shellbag data",
+        "command": "SBECmd.exe --hive UsrClass.dat --csv . --csvf shellbags.csv",
+        "explanation": "Parse the UsrClass.dat hive to extract all Shellbag entries. SBECmd outputs a CSV with columns for: the absolute path of each folder accessed, first and last interaction timestamps, and the folder type. This is your primary data source for reconstructing the user's browsing activity."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Open Shellbags in GUI for visual analysis",
+        "command": "ShellBags Explorer → File → Load offline hive → UsrClass.dat",
+        "explanation": "ShellBags Explorer provides a tree view that mirrors the exact folder hierarchy the user browsed. This makes it easy to see: which drives were accessed, how deep into directory trees the user went, and the overall pattern of folder access. The tree structure is more intuitive than CSV analysis for understanding browsing behavior."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Identify network share access from Shellbags",
+        "command": "Filter shellbags.csv for paths starting with \\\\ (UNC paths)",
+        "explanation": "Network share access is captured in Shellbags as UNC paths. Filter the Shellbag output for any entries starting with `\\\\`. Each UNC path entry proves the user navigated to that remote folder in Windows Explorer. Document every network path — these represent lateral movement or legitimate network resource access that needs classification."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Analyze sensitive folder access patterns",
+        "command": "Search shellbags.csv for keywords: finance, HR, admin, confidential, backup",
+        "explanation": "Look for Shellbag entries indicating access to sensitive directories. An attacker performing data reconnaissance will browse through folders looking for valuable data. The Shellbag trail shows exactly which folders they opened, even if they didn't copy anything — proving intent and access scope."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Examine removable media and ZIP file access",
+        "command": "Look for drive letter paths (D:\\, E:\\, F:\\) and .zip paths in Shellbags",
+        "explanation": "Shellbags record browsing inside ZIP files (Windows Explorer treats them as folders) and removable media folder structures. USB drive access appears as drive letter paths that don't correspond to fixed disks. This evidence is critical for data exfiltration investigations — it proves a USB drive was used and what folders were browsed on it."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Build a timeline of folder access",
+        "command": "Sort shellbags.csv by LastInteractedWith timestamp",
+        "explanation": "Sorting by last interaction timestamp reveals the chronological sequence of folder access. This shows the attacker's browsing path: which folders they checked first, how they navigated through the directory tree, and which areas they spent time in. Gaps in the timeline may indicate activity in applications other than Explorer."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Cross-reference with NTUSER.DAT for additional context",
+        "command": "rip.pl -r NTUSER.DAT -p recentdocs && rip.pl -r NTUSER.DAT -p userassist",
+        "explanation": "NTUSER.DAT provides complementary evidence: RecentDocs shows files (not just folders) that were opened, and UserAssist shows program execution with access counts. Cross-referencing these with Shellbag data builds a more complete picture — e.g., the user browsed to a folder (Shellbag) and opened a specific document there (RecentDocs)."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Document findings and assess data exposure",
+        "command": "Compile all accessed paths with timestamps and classify sensitivity",
+        "explanation": "Create the final report documenting: (1) Every folder accessed (from Shellbags), (2) Every file opened (from RecentDocs/LNK files), (3) Network shares browsed, (4) Removable media usage, (5) Timestamps for all activity. Classify each accessed resource by sensitivity level to determine the potential data exposure from this compromise."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "keepass",
+    "nextChallengeId": "crownjewel-2"
+  }
+}

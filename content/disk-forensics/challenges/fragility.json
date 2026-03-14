@@ -1,0 +1,105 @@
+{
+  "challengeId": "fragility",
+  "name": "Fragility",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Fragility",
+  "difficulty": "medium",
+  "estimatedTime": "3-4 hours",
+  "keyTakeaway": "NTFS deep dive — MFT parsing, USN Journal analysis, and $LogFile examination to recover evidence of deleted and modified files",
+  "tags": ["ntfs", "mft", "usn-journal", "logfile", "file-system-metadata", "deleted-files"],
+  "fundamentals": {
+    "content": "## NTFS Forensic Deep Dive\n\n### NTFS Metadata Structures\n\nNTFS maintains several internal metadata structures that are forensic goldmines. Even when attackers delete files or wipe logs, these low-level structures often retain evidence.\n\n### $MFT (Master File Table)\n\nThe MFT is the backbone of NTFS — it contains a record for every file and directory on the volume:\n\n| Attribute | Description | Forensic Value |\n|-----------|------------|----------------|\n| $STANDARD_INFORMATION | Timestamps (MACE), file permissions | Can be timestomped by attackers |\n| $FILE_NAME | File name, parent directory, timestamps | Cannot be easily timestomped — more reliable |\n| $DATA | File content (if small) or cluster runs | Actual file data or pointer to it |\n| Sequence number | Increments when MFT entry is reused | Detects MFT entry reuse after deletion |\n\n**Key insight**: Files have TWO sets of timestamps — `$STANDARD_INFORMATION` (easily modified) and `$FILE_NAME` (difficult to modify). When these diverge, it indicates **timestomping** — an anti-forensics technique.\n\n### $UsnJrnl (USN Journal / Change Journal)\n\nThe USN Journal records every change to the filesystem:\n- File creates, deletes, renames, modifications\n- Each entry includes: timestamp, filename, parent directory, reason code\n- Stored in `$Extend\\$UsnJrnl:$J`\n- Can contain millions of entries spanning days to weeks\n\nReason codes reveal what happened:\n```\n0x100 = FILE_CREATE\n0x200 = FILE_DELETE\n0x1000 = RENAME_OLD_NAME\n0x2000 = RENAME_NEW_NAME  \n0x80000000 = CLOSE (file handle closed)\n```\n\n### $LogFile (Transaction Log)\n\nThe NTFS transaction log records filesystem operations for crash recovery:\n- Contains redo/undo operations for MFT changes\n- Wraps around (circular buffer) so it only retains recent operations\n- Can recover details of very recent file operations even if other evidence is gone\n\n### Forensic Analysis Patterns\n\n**Anti-forensics detection:**\n1. Parse $MFT → compare $STANDARD_INFORMATION vs $FILE_NAME timestamps → divergence = timestomping\n2. Parse $UsnJrnl → look for bulk DELETE operations → anti-forensics cleanup\n3. Parse $LogFile → recover details of recently deleted MFT entries\n\n**Deleted file recovery:**\n1. MFT entries for deleted files are marked as free but data may persist\n2. $UsnJrnl shows the original filename and delete timestamp\n3. Cluster runs in the MFT entry point to data sectors that may still contain the file",
+    "toolReferences": [
+      {
+        "tool": "MFTECmd (Eric Zimmerman)",
+        "commands": [
+          "MFTECmd.exe -f $MFT --csv . --csvf mft_parsed.csv (parse Master File Table)",
+          "MFTECmd.exe -f $J --csv . --csvf usn_journal.csv (parse USN Journal)",
+          "MFTECmd.exe -f $LogFile --csv . --csvf logfile.csv (parse transaction log)",
+          "MFTECmd.exe -f $Boot --csv . --csvf boot.csv (parse boot sector info)"
+        ]
+      },
+      {
+        "tool": "analyzeMFT",
+        "commands": [
+          "analyzeMFT.py -f $MFT -o mft_analysis.csv (Python-based MFT parser)",
+          "analyzeMFT.py -f $MFT -o mft.csv --anomaly (flag timestamp anomalies)",
+          "Compare SI_Created vs FN_Created columns for timestomping detection"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "This challenge focuses on NTFS internals — you'll need to parse the $MFT, USN Journal ($J), and possibly $LogFile.",
+      "Use MFTECmd to parse the MFT. The CSV output contains both $STANDARD_INFORMATION and $FILE_NAME timestamps — compare them to detect timestomping.",
+      "The USN Journal records file creation, deletion, and modification events. Filter for specific filenames or time ranges to find relevant activity.",
+      "Look for patterns of bulk file operations in the USN Journal — mass deletions or renames may indicate anti-forensics or ransomware activity.",
+      "Deleted files still have MFT entries (marked as 'InUse: false'). These entries contain the original filename, timestamps, and data cluster locations.",
+      "The $LogFile is a circular buffer with recent transaction data. It can fill in gaps when other evidence has been overwritten."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A Windows system's NTFS metadata files have been collected for analysis. The investigation requires deep filesystem analysis — parsing the MFT for file records, examining the USN Journal for change history, and checking for anti-forensics techniques like timestomping. You need to recover evidence that surface-level analysis would miss.\n\n**NTFS metadata files:**\n\n| File | Purpose | Size |\n|------|---------|------|\n| $MFT | Master File Table (all file records) | Often hundreds of MB |\n| $UsnJrnl:$J | USN Journal (change log) | Can be GB |\n| $LogFile | Transaction log | Typically 64-256 MB |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Parse the Master File Table",
+        "command": "MFTECmd.exe -f $MFT --csv . --csvf mft_parsed.csv",
+        "explanation": "Parse the MFT to get a complete record of every file and directory on the volume. The CSV output includes: entry number, parent entry, filename, file size, and two sets of timestamps ($STANDARD_INFORMATION and $FILE_NAME). This is your master reference for every file that exists or has existed on the filesystem."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Detect timestomping by comparing timestamp sets",
+        "command": "Filter mft_parsed.csv where SI_Created != FN_Created or SI_Modified != FN_Modified",
+        "explanation": "Compare $STANDARD_INFORMATION timestamps against $FILE_NAME timestamps. Legitimate files have matching (or very close) timestamps in both attributes. When they diverge significantly — e.g., $SI shows creation in 2020 but $FN shows 2024 — the file has been timestomped. This is a classic anti-forensics technique where attackers modify $SI timestamps to blend malicious files with legitimate system files."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Identify deleted files from MFT entries",
+        "command": "Filter mft_parsed.csv for InUse == false",
+        "explanation": "Deleted files have MFT entries with `InUse` set to false. These entries still contain: the original filename, full timestamps, file size, and cluster allocation data. Sort deleted entries by timestamp to see what was recently removed. Pay special attention to deleted executables, scripts, and documents in user-accessible directories."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Parse the USN Journal for filesystem change history",
+        "command": "MFTECmd.exe -f $J --csv . --csvf usn_journal.csv",
+        "explanation": "The USN Journal provides a chronological log of every filesystem change. Parse it and look for: FILE_CREATE entries for new files, FILE_DELETE for removed files, RENAME operations (attackers often rename tools to avoid detection), and DATA_EXTEND/DATA_TRUNCATION for file modifications. This is often the most detailed timeline source."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Correlate USN Journal entries with MFT findings",
+        "command": "Cross-reference USN entries with MFT entry numbers for deleted files",
+        "explanation": "USN Journal entries reference files by their MFT entry number and parent directory. For deleted files found in step 3, search the USN Journal for the same entry number to find: when the file was created, any renames it underwent, when it was modified, and when it was deleted. This reconstructs the complete lifecycle of each deleted file."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Search for evidence of anti-forensics in the USN Journal",
+        "command": "Filter usn_journal.csv for bulk DELETE operations within a short time window",
+        "explanation": "Look for patterns indicating cleanup: dozens of FILE_DELETE entries within minutes targeting executables, logs, or evidence files. Also look for: deletion of event logs (.evtx files), removal of Prefetch files (.pf), clearing of browser history databases, or deletion of files in attacker staging directories. The USN Journal records these deletions even though the files are gone."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Examine the $LogFile for recent transaction details",
+        "command": "MFTECmd.exe -f $LogFile --csv . --csvf logfile.csv",
+        "explanation": "The $LogFile contains NTFS transaction records with redo/undo data. It's a circular buffer so it only has recent activity, but it can reveal: MFT attribute changes (including the exact bytes modified), file data changes (for resident files), and directory index updates. This fills in details that the MFT and USN Journal don't capture."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Attempt recovery of deleted file content",
+        "command": "icat -o <offset> disk.E01 <mft_entry_number> > recovered_file",
+        "explanation": "For deleted files with intact MFT entries, use the cluster run information to attempt data recovery. If the clusters haven't been overwritten by new data, the complete file content can be recovered. Use `icat` with the MFT entry number (inode) to extract the data. Verify recovered files by checking magic bytes, calculating hashes, and examining content."
+      },
+      {
+        "stepNumber": 9,
+        "description": "Build the forensic narrative from NTFS metadata",
+        "command": "Correlate MFT, USN Journal, and $LogFile findings into a timeline",
+        "explanation": "Merge all NTFS metadata findings: (1) File creation events (from USN Journal) showing when attacker tools were dropped, (2) Execution evidence (from Prefetch cross-referenced with MFT timestamps), (3) Anti-forensics activity (timestomping from MFT, bulk deletions from USN Journal), (4) Recovered deleted files providing direct malware samples. This low-level analysis often reveals evidence that was intentionally destroyed at the surface level."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "jingle",
+    "nextChallengeId": "optinseltrace-4"
+  }
+}

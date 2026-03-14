@@ -1,0 +1,100 @@
+{
+  "challengeId": "litter",
+  "name": "Litter",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/Litter",
+  "difficulty": "very_easy",
+  "estimatedTime": "1 hour",
+  "keyTakeaway": "Windows filesystem artifacts analysis — parsing LNK files, Prefetch data, and jump lists to reconstruct user activity on a compromised system",
+  "tags": ["lnk-files", "prefetch", "windows-artifacts", "filesystem", "user-activity"],
+  "fundamentals": {
+    "content": "## Windows Filesystem Artifacts\n\n### Why Windows Artifacts Matter in Forensics\n\nWindows creates a rich trail of artifacts as users interact with the system. These artifacts persist even after files are deleted, providing investigators with evidence of file access, program execution, and user behavior. Understanding these artifacts is the foundation of disk forensics.\n\n### LNK (Shortcut) Files\n\nWindows automatically creates `.lnk` files when users open files, even from network shares or removable media. These shortcuts contain:\n- **Target file path** — the original file location\n- **MAC timestamps** — creation, modification, and access times of the target\n- **Volume serial number** — identifies the drive the file was on\n- **Machine ID** — hostname of the system where the target resided\n- **File size** — size of the target file at the time of access\n\nLNK files persist in `C:\\Users\\<user>\\AppData\\Roaming\\Microsoft\\Windows\\Recent\\`.\n\n### Prefetch Files\n\nWindows Prefetch records program execution to speed up subsequent launches:\n- Location: `C:\\Windows\\Prefetch\\<EXECUTABLE>-<HASH>.pf`\n- Contains: **last 8 execution times**, run count, files/directories referenced\n- The hash in the filename is based on the executable path, so the same program run from different locations creates separate Prefetch entries\n\n### Jump Lists\n\nJump Lists track recently and frequently accessed files per application:\n- **AutomaticDestinations** — system-maintained recent file lists\n- **CustomDestinations** — application-defined pinned items\n- Each entry links an application (by AppID) to the files it opened\n\n### Evidence Hierarchy\n\nWhen reconstructing user activity, these artifacts complement each other:\n1. **Prefetch** proves a program executed and when\n2. **LNK files** prove specific files were accessed\n3. **Jump Lists** show which application opened which files\n4. **Shellbags** (covered later) show which folders were browsed",
+    "toolReferences": [
+      {
+        "tool": "LECmd (Eric Zimmerman)",
+        "commands": [
+          "LECmd.exe -f shortcut.lnk (parse a single LNK file)",
+          "LECmd.exe -d C:\\Users --csv . --csvf lnk_output.csv (batch parse all LNK files)",
+          "Look for: TargetCreated, TargetModified, TargetAccessed timestamps",
+          "Look for: MachineMACAddress and MachineID fields"
+        ]
+      },
+      {
+        "tool": "PECmd (Eric Zimmerman)",
+        "commands": [
+          "PECmd.exe -f EXECUTABLE-HASH.pf (parse single Prefetch file)",
+          "PECmd.exe -d C:\\Windows\\Prefetch --csv . (batch parse all Prefetch)",
+          "Look for: RunCount and LastRunTime fields",
+          "Look for: FilesLoaded to see DLLs and files referenced during execution"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "Start by examining the provided evidence files — identify what types of artifacts you're working with (LNK files, Prefetch, event logs, etc.).",
+      "Use LECmd to parse any LNK files found. The target path and timestamps reveal what files were accessed and when.",
+      "Prefetch files tell you which programs were executed. Look for unusual or suspicious executables that don't belong on the system.",
+      "Cross-reference timestamps across different artifact types — a program execution in Prefetch should correlate with file access in LNK files.",
+      "Pay attention to network paths in LNK files — they can reveal lateral movement or access to file shares.",
+      "Look for evidence of data staging — files being copied to temporary locations before exfiltration."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** A Forela employee's workstation shows signs of compromise. You're given filesystem artifacts from the machine and need to reconstruct what happened — what programs ran, what files were accessed, and whether data was exfiltrated.\n\n**Key artifacts to analyze:**\n\n| Artifact Type | Location | Purpose |\n|--------------|----------|--------|\n| LNK files | Recent folder | File access history |\n| Prefetch | C:\\Windows\\Prefetch | Program execution history |\n| Jump Lists | AutomaticDestinations | App-to-file associations |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Inventory the provided evidence",
+        "command": "List and categorize all files in the evidence archive",
+        "explanation": "Before diving into analysis, inventory what you have. Identify file types: LNK files (`.lnk`), Prefetch files (`.pf`), registry hives, event logs, etc. This determines your analysis approach and which tools to use first."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Parse LNK files for file access evidence",
+        "command": "LECmd.exe -d ./evidence/Recent --csv . --csvf lnk_results.csv",
+        "explanation": "Parse all LNK shortcut files to reconstruct which files the user (or attacker) accessed. Each LNK file contains the target file path, timestamps, volume information, and the machine where the target resided. Look for unusual target paths pointing to sensitive files or network locations."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Analyze Prefetch for program execution",
+        "command": "PECmd.exe -d ./evidence/Prefetch --csv . --csvf prefetch_results.csv",
+        "explanation": "Parse Prefetch files to identify which programs executed on the system. Focus on: (1) executables that shouldn't be on a standard workstation (e.g., hacking tools, encoders), (2) the run count and last execution time, (3) suspicious programs run only once (potential attacker tools)."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Identify suspicious program executions",
+        "command": "Review prefetch_results.csv for anomalous executables",
+        "explanation": "Filter the Prefetch results for programs that stand out. Look for tools commonly used by attackers: `cmd.exe` with unusual paths, `powershell.exe` (check the Prefetch hash to determine if it was launched from an unusual directory), data compression tools (`7z.exe`, `rar.exe`), or known attacker utilities."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Correlate LNK timestamps with Prefetch execution times",
+        "command": "Cross-reference timestamps between lnk_results.csv and prefetch_results.csv",
+        "explanation": "Build a timeline by correlating when programs executed (Prefetch) with when files were accessed (LNK files). A pattern like: attacker tool executes at 14:00 -> sensitive document accessed at 14:02 -> compression utility runs at 14:05 tells a clear story of compromise and data staging."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Check for network share access",
+        "command": "Search LNK files for UNC paths (\\\\server\\share)",
+        "explanation": "LNK files with UNC paths (`\\\\server\\share\\file`) indicate access to network file shares. This can reveal lateral movement — the attacker accessing files on other machines from the compromised workstation. Note the server names and share paths for scope assessment."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Examine Jump Lists for application-file relationships",
+        "command": "JLECmd.exe -d ./evidence/AutomaticDestinations --csv . --csvf jumplists.csv",
+        "explanation": "Jump Lists tie specific applications to the files they opened. This helps confirm which application was used to access suspicious files. Each entry includes the application ID (maps to a known application), the target file path, and access timestamps."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Reconstruct the attack timeline",
+        "command": "Merge all findings into a chronological timeline",
+        "explanation": "Combine evidence from all artifact sources into a unified timeline: (1) Initial program execution visible in Prefetch, (2) File access visible in LNK files and Jump Lists, (3) Data staging and potential exfiltration tools in Prefetch, (4) Network share access from LNK UNC paths. This timeline tells the complete story of the incident."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": null,
+    "nextChallengeId": "lockpick"
+  }
+}

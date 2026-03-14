@@ -1,0 +1,106 @@
+{
+  "challengeId": "optinseltrace-4",
+  "name": "OpTinselTrace-4",
+  "source": "sherlock",
+  "htbUrl": "https://app.hackthebox.com/sherlocks/OpTinselTrace-4",
+  "difficulty": "medium",
+  "estimatedTime": "3-4 hours",
+  "keyTakeaway": "Advanced Windows disk forensics — correlating multiple artifact types (event logs, registry, filesystem) for comprehensive incident reconstruction",
+  "tags": ["windows-forensics", "event-logs", "registry", "artifact-correlation", "incident-reconstruction", "multi-artifact"],
+  "fundamentals": {
+    "content": "## Multi-Artifact Correlation in Windows Forensics\n\n### The Art of Artifact Correlation\n\nReal-world investigations rarely rely on a single artifact type. The power of disk forensics comes from correlating evidence across multiple sources — each artifact confirms, extends, or contradicts findings from others. This challenge teaches the methodology of building a complete picture from fragmentary evidence.\n\n### Evidence Correlation Matrix\n\n| Event | Prefetch | Event Logs | Registry | MFT | LNK |\n|-------|----------|------------|----------|-----|-----|\n| Program ran | Run count, time | 4688 (if audited) | UserAssist | $SI timestamps | - |\n| File accessed | Files loaded | 4663 (if audited) | RecentDocs | $SI Access time | Target path |\n| Service installed | svchost PF entry | 7045 | Services key | Service binary | - |\n| Logon | - | 4624/4625 | - | - | - |\n| USB inserted | - | 20001 (PnP) | USBStor | Device files | - |\n\n### Windows Event Logs for Disk Forensics\n\nEvent logs stored on disk provide critical investigation context:\n\n| Log | Key Events | Path |\n|-----|-----------|------|\n| Security.evtx | 4624 (logon), 4688 (process), 4698 (task) | winevt\\Logs\\ |\n| System.evtx | 7045 (service install), 1001 (crash) | winevt\\Logs\\ |\n| PowerShell\\Operational.evtx | 4104 (script block) | winevt\\Logs\\ |\n| Sysmon\\Operational.evtx | 1 (process), 3 (network), 11 (file create) | winevt\\Logs\\ |\n| TaskScheduler\\Operational.evtx | 106 (registered), 200 (started) | winevt\\Logs\\ |\n\n### The Timeline Approach\n\nThe most effective correlation method:\n1. **Collect** all artifacts into a single timeline (plaso or manual CSV merge)\n2. **Anchor** on a known event (first compromise indicator, alert trigger)\n3. **Expand** outward from the anchor in both directions\n4. **Validate** each finding against at least one other artifact source\n\n### Common Investigation Anti-Patterns\n\n- **Tunnel vision**: Focusing on one artifact type and missing evidence in others\n- **Timestamp confusion**: Mixing UTC and local time (always normalize to UTC)\n- **Assumption bias**: Assuming the first suspicious finding is the root cause\n- **Incomplete scoping**: Stopping analysis after finding \"enough\" evidence",
+    "toolReferences": [
+      {
+        "tool": "EvtxECmd (Eric Zimmerman)",
+        "commands": [
+          "EvtxECmd.exe -d C:\\Windows\\System32\\winevt\\Logs --csv . --csvf all_events.csv (parse all event logs)",
+          "EvtxECmd.exe -f Security.evtx --csv . --csvf security.csv (parse single log)",
+          "Filter output by EventId for specific event types",
+          "Use --maps flag with Eric Zimmerman's event maps for enriched output"
+        ]
+      },
+      {
+        "tool": "Timeline Explorer (Eric Zimmerman)",
+        "commands": [
+          "GUI tool for exploring large CSV files from EZ tools",
+          "Load multiple CSV outputs and filter/sort across them",
+          "Group by timestamp to correlate events across artifact types",
+          "Color-code rows by source for visual correlation"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "hints": [
+      "This challenge requires correlating evidence from multiple artifact types — no single source tells the whole story.",
+      "Start with event logs to establish a timeline of logon events and high-level system activity.",
+      "Cross-reference event log timestamps with Prefetch execution times and registry modification timestamps.",
+      "Look for PowerShell script block logging (Event ID 4104) for executed commands that may not appear in other artifacts.",
+      "Registry analysis should cover both SYSTEM (services, network config) and NTUSER.DAT (user activity, recent docs) hives.",
+      "When you find a suspicious event, look for corroborating evidence in at least two other artifact sources before drawing conclusions."
+    ]
+  },
+  "solution": {
+    "content": "## Full Walkthrough\n\n**Scenario:** Part of the OpTinselTrace series. A compromised Windows system has been imaged and you need to perform a comprehensive investigation using multiple artifact types. The key challenge is correlating evidence across event logs, registry hives, filesystem artifacts, and user activity to reconstruct the complete attack chain.\n\n**Available evidence sources:**\n\n| Source | Artifacts | Key Information |\n|--------|----------|----------------|\n| Event logs | Security, System, PowerShell, Sysmon | Logons, processes, scripts |\n| Registry | SYSTEM, SOFTWARE, SAM, NTUSER.DAT | Config, persistence, user activity |\n| Filesystem | Prefetch, LNK, MFT | Execution, file access |\n| User data | Documents, Downloads, Desktop | Delivered payloads, staging |",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "description": "Parse all event logs for timeline construction",
+        "command": "EvtxECmd.exe -d ./evidence/winevt/Logs --csv . --csvf events.csv",
+        "explanation": "Parse all Windows event logs into a single CSV. This provides the foundational timeline with: logon events (who accessed the system), process creation (what programs ran), service installations (persistence), and PowerShell activity (attacker commands). Sort by timestamp to see the chronological sequence of events."
+      },
+      {
+        "stepNumber": 2,
+        "description": "Identify the initial compromise through logon analysis",
+        "command": "Filter events.csv for EventId 4624 (successful logons) and 4625 (failed logons)",
+        "explanation": "Logon events reveal how the attacker got in. Look for: (1) Logon Type 10 (RDP) from unusual IPs, (2) Logon Type 3 (network) with unexpected account names, (3) Clusters of 4625 failures followed by 4624 success (brute force), (4) Logon at unusual hours. The Source IP and account name from the first suspicious logon are key findings."
+      },
+      {
+        "stepNumber": 3,
+        "description": "Trace executed programs through Prefetch and Event ID 4688",
+        "command": "PECmd.exe -d ./evidence/Prefetch --csv . --csvf prefetch.csv",
+        "explanation": "Cross-reference Prefetch with process creation events (Event ID 4688 if audited). Prefetch shows that a program ran and approximately when; Event ID 4688 shows the exact command line, parent process, and the account that launched it. Together, they paint a complete picture of program execution."
+      },
+      {
+        "stepNumber": 4,
+        "description": "Analyze PowerShell activity from script block logs",
+        "command": "Filter events.csv for EventId 4104 (PowerShell script block logging)",
+        "explanation": "Event ID 4104 records the full text of PowerShell scripts that were executed. Attackers heavily use PowerShell for: downloading payloads (`Invoke-WebRequest`, `IEX`), running reconnaissance (`Get-ADUser`, `Get-NetComputer`), and executing tools in memory. These logs capture even obfuscated scripts because they log the deobfuscated version."
+      },
+      {
+        "stepNumber": 5,
+        "description": "Extract registry-based indicators",
+        "command": "rip.pl -r SYSTEM -p services && rip.pl -r SOFTWARE -p run && rip.pl -r NTUSER.DAT -p userassist",
+        "explanation": "Registry analysis provides: (1) Services installed by the attacker (persistence), (2) Run key entries (startup persistence), (3) UserAssist data (ROT13-encoded program execution records with run counts). Correlate registry key modification timestamps with event log timestamps — a service installed at the same time as a suspicious logon strongly indicates attacker activity."
+      },
+      {
+        "stepNumber": 6,
+        "description": "Examine file access patterns through LNK files",
+        "command": "LECmd.exe -d ./evidence/Users --csv . --csvf lnk_files.csv",
+        "explanation": "LNK files show which documents and files were opened. Correlate with the attack timeline: files accessed after the initial compromise may be reconnaissance targets (password files, network diagrams) or attacker tool outputs (scan results, credential dumps). LNK files persist even after the original files are deleted."
+      },
+      {
+        "stepNumber": 7,
+        "description": "Check for data exfiltration indicators",
+        "command": "Search for archiving tools in Prefetch and large file creation in MFT",
+        "explanation": "Data exfiltration leaves artifacts: (1) Compression tools in Prefetch (7z.exe, rar.exe, tar, zip), (2) Large archive files created in staging directories (MFT timestamps), (3) Network connections to unusual external IPs (Sysmon Event ID 3 if available), (4) Cloud storage tool usage (OneDrive, Google Drive, Mega). The archive creation timestamp and size indicate what was stolen and when."
+      },
+      {
+        "stepNumber": 8,
+        "description": "Validate findings with cross-source correlation",
+        "command": "Merge all CSV outputs and sort by timestamp for unified timeline",
+        "explanation": "Load all parsed CSVs into Timeline Explorer. For each significant finding, verify it against at least one other source: (1) Program execution: Prefetch confirms, Event ID 4688 provides details, UserAssist adds run count, (2) Persistence: Registry shows the entry, Event ID 7045 confirms service creation time, Prefetch shows the service binary executed, (3) File access: LNK file created, MFT timestamps match, USN Journal confirms the operation."
+      },
+      {
+        "stepNumber": 9,
+        "description": "Construct the complete attack narrative",
+        "command": "Build chronological attack chain from corroborated evidence",
+        "explanation": "The final narrative should flow chronologically with each event supported by multiple artifact sources: (1) Initial access method and timestamp (event logs + Prefetch), (2) Reconnaissance commands (PowerShell logs + Prefetch), (3) Privilege escalation (event logs + registry), (4) Persistence establishment (registry + event logs + Prefetch), (5) Data access and exfiltration (LNK + MFT + Prefetch). Every claim should cite at least two independent artifact sources."
+      }
+    ]
+  },
+  "navigation": {
+    "previousChallengeId": "fragility",
+    "nextChallengeId": "jugglin"
+  }
+}

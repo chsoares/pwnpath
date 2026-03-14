@@ -1,0 +1,101 @@
+{
+  "categoryId": "disk-forensics",
+  "challenges": [
+    {
+      "position": 1,
+      "challengeId": "litter",
+      "name": "Litter",
+      "difficulty": "very_easy",
+      "estimatedTime": "1 hour",
+      "keyTakeaway": "Windows filesystem artifacts analysis — parsing LNK files, Prefetch data, and jump lists to reconstruct user activity on a compromised system"
+    },
+    {
+      "position": 2,
+      "challengeId": "lockpick",
+      "name": "Lockpick",
+      "difficulty": "very_easy",
+      "estimatedTime": "1-2 hours",
+      "keyTakeaway": "Ransomware investigation fundamentals — identifying encrypted files, recovering originals, and tracing ransomware execution artifacts"
+    },
+    {
+      "position": 3,
+      "challengeId": "lockpick2-0",
+      "name": "Lockpick2.0",
+      "difficulty": "easy",
+      "estimatedTime": "2-3 hours",
+      "keyTakeaway": "Advanced ransomware forensics — registry analysis for persistence mechanisms, Group Policy abuse, and scheduled task forensics"
+    },
+    {
+      "position": 4,
+      "challengeId": "keepass",
+      "name": "KeePass",
+      "difficulty": "easy",
+      "estimatedTime": "1-2 hours",
+      "keyTakeaway": "Password manager forensics — extracting and analyzing KeePass database artifacts, memory dumps for master keys, and credential recovery"
+    },
+    {
+      "position": 5,
+      "challengeId": "optinseltrace-2",
+      "name": "OpTinselTrace-2",
+      "difficulty": "easy",
+      "estimatedTime": "2-3 hours",
+      "keyTakeaway": "Windows Shellbag forensics — reconstructing folder navigation history to trace attacker lateral movement and data access patterns"
+    },
+    {
+      "position": 6,
+      "challengeId": "crownjewel-2",
+      "name": "CrownJewel-2",
+      "difficulty": "medium",
+      "estimatedTime": "3-4 hours",
+      "keyTakeaway": "Active Directory forensics — extracting and analyzing ntds.dit to identify compromised domain accounts and credential theft"
+    },
+    {
+      "position": 7,
+      "challengeId": "persistenceisfutile",
+      "name": "PersistenceIsFutile",
+      "difficulty": "medium",
+      "estimatedTime": "3-4 hours",
+      "keyTakeaway": "Windows persistence mechanism detection — identifying registry-based persistence including Run keys, services, scheduled tasks, and COM hijacking"
+    },
+    {
+      "position": 8,
+      "challengeId": "jingle",
+      "name": "Jingle",
+      "difficulty": "medium",
+      "estimatedTime": "2-3 hours",
+      "keyTakeaway": "Full disk image investigation — mounting and triaging a Windows disk image to reconstruct an incident from filesystem and registry artifacts"
+    },
+    {
+      "position": 9,
+      "challengeId": "fragility",
+      "name": "Fragility",
+      "difficulty": "medium",
+      "estimatedTime": "3-4 hours",
+      "keyTakeaway": "NTFS deep dive — MFT parsing, USN Journal analysis, and $LogFile examination to recover evidence of deleted and modified files"
+    },
+    {
+      "position": 10,
+      "challengeId": "optinseltrace-4",
+      "name": "OpTinselTrace-4",
+      "difficulty": "medium",
+      "estimatedTime": "3-4 hours",
+      "keyTakeaway": "Advanced Windows disk forensics — correlating multiple artifact types (event logs, registry, filesystem) for comprehensive incident reconstruction"
+    },
+    {
+      "position": 11,
+      "challengeId": "jugglin",
+      "name": "Jugglin",
+      "difficulty": "medium",
+      "estimatedTime": "3-4 hours",
+      "keyTakeaway": "Container forensics — analyzing Docker images, container layers, and overlay filesystems to investigate containerized application compromises"
+    },
+    {
+      "position": 12,
+      "challengeId": "shadowroast",
+      "name": "ShadowRoast",
+      "difficulty": "hard",
+      "estimatedTime": "4-5 hours",
+      "keyTakeaway": "Volume Shadow Copy forensics — extracting evidence from VSS snapshots, recovering deleted credentials, and analyzing shadow copy-based attack techniques"
+    }
+  ]
+}
