@@ -17,7 +17,7 @@ export default function Spoiler({
     <div className="rounded-lg border border-drac-border bg-drac-bg">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-drac-fg transition-colors hover:text-drac-cyan"
+        className="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium text-drac-fg transition-colors hover:text-drac-pink"
       >
         <span className="flex items-center gap-2">
           {icon && (

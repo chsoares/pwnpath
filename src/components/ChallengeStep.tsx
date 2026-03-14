@@ -51,7 +51,7 @@ export default function ChallengeStep({
         className="group mb-8 flex-1 rounded-lg border border-drac-border bg-drac-bg p-4 transition-all hover:border-drac-purple/50 hover:bg-drac-hover"
       >
         <div className="mb-1 flex items-center gap-3">
-          <h3 className="text-sm font-semibold text-drac-fg group-hover:text-drac-cyan">
+          <h3 className="text-sm font-semibold text-drac-fg group-hover:text-drac-pink">
             {challenge.name}
           </h3>
           <DifficultyBadge difficulty={challenge.difficulty} />

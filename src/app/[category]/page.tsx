@@ -28,7 +28,7 @@ export default async function CategoryPage({
     <div>
       <Link
         href="/"
-        className="mb-6 inline-flex items-center gap-1.5 text-sm text-drac-muted transition-colors hover:text-drac-cyan"
+        className="mb-6 inline-flex items-center gap-1.5 text-sm text-drac-muted transition-colors hover:text-drac-pink"
       >
         <span className="material-symbols-outlined text-base">arrow_back</span>
         cd ..
@@ -70,7 +70,7 @@ export default async function CategoryPage({
       )}
 
       <h2 className="mb-6 flex items-center gap-2 text-xl font-semibold text-drac-fg">
-        <span className="material-symbols-outlined text-xl text-drac-cyan">account_tree</span>
+        <span className="material-symbols-outlined text-xl text-drac-pink">account_tree</span>
         Learning Path
       </h2>
       <PathTrail challenges={pathData.challenges} categoryId={category} />

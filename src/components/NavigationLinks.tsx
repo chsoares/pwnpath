@@ -17,7 +17,7 @@ export default function NavigationLinks({
       {navigation.previousChallengeId ? (
         <Link
           href={`/${categoryId}/${navigation.previousChallengeId}`}
-          className="group flex items-center gap-2 text-sm text-drac-muted transition-colors hover:text-drac-cyan"
+          className="group flex items-center gap-2 text-sm text-drac-muted transition-colors hover:text-drac-pink"
         >
           <span className="material-symbols-outlined text-base transition-transform group-hover:-translate-x-0.5">
             arrow_back
@@ -30,7 +30,7 @@ export default function NavigationLinks({
       {navigation.nextChallengeId ? (
         <Link
           href={`/${categoryId}/${navigation.nextChallengeId}`}
-          className="group flex items-center gap-2 text-sm text-drac-muted transition-colors hover:text-drac-cyan"
+          className="group flex items-center gap-2 text-sm text-drac-muted transition-colors hover:text-drac-pink"
         >
           <span>{nextName ?? "Next"}</span>
           <span className="material-symbols-outlined text-base transition-transform group-hover:translate-x-0.5">

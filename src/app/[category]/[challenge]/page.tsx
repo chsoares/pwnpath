@@ -53,7 +53,7 @@ export default async function ChallengePage({
     <div>
       <Link
         href={`/${category}`}
-        className="mb-6 inline-flex items-center gap-1.5 text-sm text-drac-muted transition-colors hover:text-drac-cyan"
+        className="mb-6 inline-flex items-center gap-1.5 text-sm text-drac-muted transition-colors hover:text-drac-pink"
       >
         <span className="material-symbols-outlined text-base">arrow_back</span>
         cd ..
@@ -84,7 +84,7 @@ export default async function ChallengePage({
             href={lesson.htbUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1 text-drac-pink transition-colors hover:text-drac-cyan"
+            className="flex items-center gap-1 text-drac-pink transition-colors hover:text-drac-pink"
           >
             <span className="material-symbols-outlined text-sm">open_in_new</span>
             HTB
@@ -107,7 +107,7 @@ export default async function ChallengePage({
         <LessonSection content={lesson.fundamentals.content} />
         {lesson.fundamentals.toolReferences.length > 0 && (
           <div className="mt-6 rounded-lg border border-drac-border bg-drac-bg p-5">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-drac-cyan">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-drac-pink">
               <span className="material-symbols-outlined text-base">build</span>
               Key Tool Commands
             </h3>

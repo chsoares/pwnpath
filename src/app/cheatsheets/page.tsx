@@ -26,7 +26,7 @@ export default function CheatsheetsIndex() {
             className="rounded-lg border border-drac-border bg-drac-bg p-6 transition-all hover:border-drac-purple/50 hover:bg-drac-hover"
           >
             <h2 className="mb-1 flex items-center gap-2 font-semibold text-drac-fg">
-              <span className="material-symbols-outlined text-base text-drac-cyan">terminal</span>
+              <span className="material-symbols-outlined text-base text-drac-pink">terminal</span>
               {cat.name}
             </h2>
             <p className="text-sm text-drac-muted">

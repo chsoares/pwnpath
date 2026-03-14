@@ -25,7 +25,7 @@ export default function CategoryCard({
     <div className="group relative flex flex-col rounded-lg border border-drac-border bg-drac-bg p-5 transition-all hover:border-drac-purple/50 hover:bg-drac-hover">
       {!isAvailable && <ComingSoon />}
       <div className="mb-3 flex items-center gap-3">
-        <span className="material-symbols-outlined text-2xl text-drac-cyan">
+        <span className="material-symbols-outlined text-2xl text-drac-pink">
           {icon}
         </span>
         <h2 className="text-base font-semibold text-drac-fg">

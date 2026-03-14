@@ -22,7 +22,7 @@ export default async function CheatsheetPage({
     <div>
       <Link
         href="/cheatsheets"
-        className="mb-6 inline-flex items-center gap-1.5 text-sm text-drac-muted transition-colors hover:text-drac-cyan"
+        className="mb-6 inline-flex items-center gap-1.5 text-sm text-drac-muted transition-colors hover:text-drac-pink"
       >
         <span className="material-symbols-outlined text-base">arrow_back</span>
         cd ..

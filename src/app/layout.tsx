@@ -41,14 +41,14 @@ export default function RootLayout({
             <div className="flex items-center gap-5 text-sm text-drac-muted">
               <Link
                 href="/"
-                className="flex items-center gap-1.5 transition-colors hover:text-drac-cyan"
+                className="flex items-center gap-1.5 transition-colors hover:text-drac-pink"
               >
                 <span className="material-symbols-outlined text-base">route</span>
                 trails
               </Link>
               <Link
                 href="/cheatsheets"
-                className="flex items-center gap-1.5 transition-colors hover:text-drac-cyan"
+                className="flex items-center gap-1.5 transition-colors hover:text-drac-pink"
               >
                 <span className="material-symbols-outlined text-base">terminal</span>
                 cheatsheets
