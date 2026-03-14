@@ -2,7 +2,7 @@
   "categories": [
     {
       "id": "network-forensics",
-      "name": "Network Forensics (PCAP)",
+      "name": "Network Forensics",
       "description": "Master traffic analysis through Wireshark, tshark, and protocol dissection. Learn to identify malicious communications, extract artifacts, and reconstruct attack narratives from packet captures.",
       "icon": "network",
       "status": "available",

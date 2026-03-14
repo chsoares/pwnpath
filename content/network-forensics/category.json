@@ -1,6 +1,6 @@
 {
   "id": "network-forensics",
-  "name": "Network Forensics (PCAP)",
+  "name": "Network Forensics",
   "overview": "Network forensics is the capture, recording, and analysis of network traffic to discover the source of security attacks or other incidents. In this learning path, you'll progress from basic packet capture analysis to advanced protocol dissection and attack reconstruction.\n\nYou'll work with real-world scenarios from HackTheBox Sherlocks and Challenges, building practical skills that translate directly to SOC analyst and incident responder roles.",
   "prerequisites": [
     "Basic understanding of TCP/IP networking (OSI model, common protocols)",
