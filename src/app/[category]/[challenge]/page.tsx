@@ -170,7 +170,9 @@ export default async function ChallengePage({
                   <code className="mb-2 block rounded border border-drac-border bg-drac-bg px-3 py-2 text-sm text-drac-green">
                     $ {step.command}
                   </code>
-                  <p className="text-sm text-drac-muted">{step.explanation}</p>
+                  <div className="mt-1 text-sm">
+                    <LessonSection content={step.explanation} />
+                  </div>
                 </div>
               ))}
             </div>

@@ -95,6 +95,15 @@ body::after {
   background: var(--fg-muted);
 }
 
+/* Reset inline-code styles inside code blocks */
+.prose pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
 /* Material Icons sizing */
 .material-icons-outlined {
   font-size: inherit;

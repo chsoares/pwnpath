@@ -18,11 +18,11 @@
       }
     },
     {
-      "name": "GDB + pwndbg",
-      "description": "GNU Debugger enhanced with pwndbg for modern debugging — set breakpoints, inspect registers, step through execution, and patch binaries at runtime",
+      "name": "GDB + GEF",
+      "description": "GNU Debugger enhanced with GEF for modern debugging — set breakpoints, inspect registers, step through execution, and patch binaries at runtime",
       "installCommands": {
-        "linux": "yay -S gdb pwndbg",
-        "macos": "brew install gdb (limited — use a Linux VM for full pwndbg support)",
+        "linux": "yay -S gdb gef",
+        "macos": "brew install gdb (limited — use a Linux VM for full GEF support)",
         "windows": "Use WSL2 with Ubuntu"
       }
     },

@@ -8,16 +8,21 @@
   "keyTakeaway": "Reflective DLL injection detection — identifying in-memory-only DLLs that never touch disk, using malfind to locate injected code, and modifying Volatility source code to bypass DLL header validation for successful extraction",
   "tags": ["Volatility", "reflective DLL injection", "anti-forensics", "malfind", "dlldump", "code modification", "volshell"],
   "fundamentals": {
-    "content": "## Reflective DLL Injection\n\n### What Is Reflective DLL Injection?\n\nReflective DLL injection is an advanced code injection technique where a DLL is loaded directly from memory without ever touching disk. Unlike standard DLL injection (which calls `LoadLibrary` on a file path), reflective injection:\n\n1. **Allocates memory** in the target process\n2. **Copies the DLL** directly into that memory\n3. **Manually resolves imports** and relocations\n4. **Calls the entry point** without using the Windows loader\n\nBecause the DLL never exists as a file on disk, file-based antivirus and standard forensic tools miss it entirely.\n\n### Why Standard dlldump Fails\n\nVolatility's `dlldump` plugin works by:\n1. Finding the DLL's `_LDR_DATA_TABLE_ENTRY` in the PEB\n2. Reading the PE header to determine the DLL's size\n3. Dumping that many bytes from the base address\n\nReflectively injected DLLs often have **corrupted or intentionally damaged PE headers** to prevent easy extraction. The `dlldump` plugin may fail with validation errors when the headers don't match expected formats.\n\n### Modifying Volatility Source Code\n\nSometimes the forensic tool itself must be modified to handle anti-forensic techniques:\n\n```python\n# In volatility/plugins/procdump.py or dlldump.py\n# Find the PE header validation check\nif pe.OPTIONAL_HEADER.SizeOfImage > MAX_SIZE:\n    # Comment out or adjust this validation\n    # to allow dumping DLLs with corrupted headers\n```\n\nThis is a legitimate forensic technique — the attacker broke the rules, so your tools need to accommodate that.\n\n### volshell for Interactive Analysis\n\nWhen automated plugins fail, `volshell` provides an interactive Python shell with direct access to memory structures:\n\n```\nvol.py -f memory.raw --profile=Win7SP1x86 volshell\n>>> cc(pid=<pid>)\n>>> db(0x<address>, length=256)\n>>> proc().get_process_image_file_name()\n```",
+    "content": "## Reflective DLL Injection\n\n### What Is Reflective DLL Injection?\n\nReflective DLL injection is an advanced code injection technique where a DLL is loaded directly from memory without ever touching disk. Unlike standard DLL injection (which calls `LoadLibrary` on a file path), reflective injection:\n\n1. **Allocates memory** in the target process\n2. **Copies the DLL** directly into that memory\n3. **Manually resolves imports** and relocations\n4. **Calls the entry point** without using the Windows loader\n\nBecause the DLL never exists as a file on disk, file-based antivirus and standard forensic tools miss it entirely.\n\n### Why Standard dlldump Fails\n\nVolatility's `dlldump` plugin works by:\n1. Finding the DLL's `_LDR_DATA_TABLE_ENTRY` in the PEB\n2. Reading the PE header to determine the DLL's size\n3. Dumping that many bytes from the base address\n\nReflectively injected DLLs often have **corrupted or intentionally damaged PE headers** to prevent easy extraction. The `dlldump` plugin may fail with validation errors when the headers don't match expected formats.\n\n### Modifying Volatility Source Code\n\nSometimes the forensic tool itself must be modified to handle anti-forensic techniques. This applies to both Volatility 2 and 3:\n\n```python\n# Find the PE header validation check in the plugin source\n# Comment out or adjust the validation to allow dumping\n# DLLs with intentionally corrupted headers\n```\n\nThis is a legitimate forensic technique — the attacker broke the rules, so your tools need to accommodate that.\n\n### Interactive Analysis\n\nWhen automated plugins fail, you can use Volatility 3's `volshell` for interactive analysis:\n\n```\nvol -f memory.raw windows.volshell\n>>> # Navigate process structures and read raw memory\n```\n\n> **Note:** This challenge specifically targets reflective DLL injection with corrupted PE headers. The source code modification technique may be easier to apply to Volatility 2's `dlldump` plugin, as the code paths are well-documented. Volatility 3 can be used for detection (malfind), but the extraction step may require Vol2.",
     "toolReferences": [
       {
-        "tool": "Volatility 2",
+        "tool": "Volatility 3",
         "commands": [
-          "vol.py -f memory.raw --profile=Win7SP1x86 malfind",
+          "vol -f memory.raw windows.malfind",
+          "vol -f memory.raw windows.dlllist --pid <pid>",
+          "vol -f memory.raw windows.pslist --dump --pid <pid>"
+        ]
+      },
+      {
+        "tool": "Volatility 2 (for dlldump with source modification)",
+        "commands": [
           "vol.py -f memory.raw --profile=Win7SP1x86 dlldump -p <pid> -D ./dump/",
-          "vol.py -f memory.raw --profile=Win7SP1x86 dlllist -p <pid>",
-          "vol.py -f memory.raw --profile=Win7SP1x86 volshell",
-          "vol.py -f memory.raw --profile=Win7SP1x86 procdump -p <pid> -D ./dump/"
+          "vol.py -f memory.raw --profile=Win7SP1x86 volshell"
         ]
       },
       {
@@ -32,14 +37,14 @@
   },
   "hints": {
     "hints": [
-      "This is a Cyber Apocalypse 2022 challenge on Windows 7 SP1 x86 — start by profiling the image and listing processes.",
-      "Use malfind to detect injected code — reflectively injected DLLs show up as executable memory regions with MZ/PE headers but no backing file.",
+      "This is a Cyber Apocalypse 2022 challenge on Windows 7 SP1 x86 — start with windows.info and windows.pslist to identify the OS and enumerate processes.",
+      "Use windows.malfind to detect injected code — reflectively injected DLLs show up as executable memory regions with MZ/PE headers but no backing file.",
       "When you find the injected DLL with malfind, note the process PID and the base address of the injected region.",
-      "Standard dlldump will likely fail because the injected DLL has a corrupted or non-standard PE header. This is intentional anti-forensics.",
-      "You need to modify Volatility's source code to bypass the PE header validation that prevents dlldump from extracting the DLL.",
+      "Standard dlldump (Volatility 2) will likely fail because the injected DLL has a corrupted or non-standard PE header. This is intentional anti-forensics.",
+      "You need to modify Volatility 2's dlldump source code to bypass the PE header validation that prevents extraction of the DLL.",
       "Look at the specific validation check that fails — it may be SizeOfImage, NumberOfSections, or another PE field that the attacker intentionally corrupted.",
-      "volshell can be used to manually read memory at the injection base address and examine the raw bytes to understand the header corruption.",
-      "After modifying Volatility and successfully dumping the DLL, examine its contents with strings or a disassembler for the flag."
+      "Volatility 2's volshell can be used to manually read memory at the injection base address and examine the raw bytes to understand the header corruption.",
+      "After modifying Volatility 2 and successfully dumping the DLL, examine its contents with strings or a disassembler for the flag."
     ]
   },
   "solution": {
@@ -47,39 +52,39 @@
     "steps": [
       {
         "stepNumber": 1,
-        "description": "Profile the image and list processes",
-        "command": "vol.py -f memory.raw imageinfo && vol.py -f memory.raw --profile=Win7SP1x86 pslist",
-        "explanation": "Confirm the Win7SP1x86 profile and enumerate processes. Look for standard Windows processes that might be hosting the injected DLL — common targets include explorer.exe, svchost.exe, or browser processes."
+        "description": "Identify the OS and list processes",
+        "command": "vol -f memory.raw windows.info && vol -f memory.raw windows.pslist",
+        "explanation": "Volatility 3 auto-detects the Win7SP1x86 profile. Enumerate processes and look for standard Windows processes that might be hosting the injected DLL — common targets include explorer.exe, svchost.exe, or browser processes."
       },
       {
         "stepNumber": 2,
         "description": "Detect injected code with malfind",
-        "command": "vol.py -f memory.raw --profile=Win7SP1x86 malfind",
-        "explanation": "malfind scans all processes for injected executable code. The reflectively injected DLL will appear as a memory region with PAGE_EXECUTE_READWRITE protection containing an MZ header (4D 5A) that is not backed by any file on disk. Note the PID and virtual address."
+        "command": "vol -f memory.raw windows.malfind",
+        "explanation": "windows.malfind scans all processes for injected executable code. The reflectively injected DLL will appear as a memory region with PAGE_EXECUTE_READWRITE protection containing an MZ header (4D 5A) that is not backed by any file on disk. Note the PID and virtual address."
       },
       {
         "stepNumber": 3,
         "description": "Attempt standard DLL extraction",
         "command": "vol.py -f memory.raw --profile=Win7SP1x86 dlldump -p <pid> -b <base_address> -D ./dump/",
-        "explanation": "Try the standard dlldump approach first. It will likely fail with a PE header validation error — the attacker intentionally corrupted certain header fields to prevent easy extraction. Note the specific error message."
+        "explanation": "Try the standard dlldump approach using Volatility 2 (the DLL extraction with source modification is easier in Vol2's well-documented dlldump plugin). It will likely fail with a PE header validation error — the attacker intentionally corrupted certain header fields to prevent easy extraction. Note the specific error message."
       },
       {
         "stepNumber": 4,
         "description": "Examine the corrupted header with volshell",
         "command": "vol.py -f memory.raw --profile=Win7SP1x86 volshell\n>>> cc(pid=<pid>)\n>>> db(<base_address>, length=512)",
-        "explanation": "Use Volatility's interactive shell to manually inspect the PE header at the injection address. Compare the header values against the PE specification to identify which fields were corrupted — this tells you what validation check to bypass."
+        "explanation": "Use Volatility 2's interactive volshell to manually inspect the PE header at the injection address. Compare the header values against the PE specification to identify which fields were corrupted — this tells you what validation check to bypass."
       },
       {
         "stepNumber": 5,
-        "description": "Modify Volatility source to bypass validation",
+        "description": "Modify Volatility 2 source to bypass validation",
         "command": "Edit the dlldump/procdump plugin source — comment out or adjust the PE header validation check that rejects the corrupted header",
-        "explanation": "Locate the specific validation in Volatility's source code (typically in volatility/plugins/procdump.py or the PE parsing module) and modify it to accept the corrupted header values. This is a legitimate forensic technique when anti-forensic measures block standard tools."
+        "explanation": "Locate the specific validation in Volatility 2's source code (typically in volatility/plugins/procdump.py or the PE parsing module) and modify it to accept the corrupted header values. This is a legitimate forensic technique when anti-forensic measures block standard tools."
       },
       {
         "stepNumber": 6,
         "description": "Extract the DLL with modified Volatility",
         "command": "vol.py -f memory.raw --profile=Win7SP1x86 dlldump -p <pid> -b <base_address> -D ./dump/",
-        "explanation": "Run dlldump again with the modified Volatility source. The validation bypass allows the plugin to extract the full DLL from process memory despite the corrupted headers."
+        "explanation": "Run dlldump again with the modified Volatility 2 source. The validation bypass allows the plugin to extract the full DLL from process memory despite the corrupted headers."
       },
       {
         "stepNumber": 7,

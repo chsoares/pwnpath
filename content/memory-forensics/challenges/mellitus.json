@@ -8,16 +8,16 @@
   "keyTakeaway": "VMware memory analysis with Volatility 3 — extracting credentials via hashdump, analyzing FTP sessions, recovering MS Paint images from process memory, and investigating network connections",
   "tags": ["Volatility 3", "hashdump", "credentials", "FTP", "VMware", "MS Paint", "vmem", "netscan", "memmap"],
   "fundamentals": {
-    "content": "## Volatility 3 and VMware Memory Analysis\n\n### Volatility 2 vs Volatility 3\n\nVolatility 3 is a complete rewrite with a different command syntax:\n\n| Feature | Volatility 2 | Volatility 3 |\n|---------|-------------|-------------|\n| Profile | `--profile=Win7SP1x64` | Auto-detected via ISF symbols |\n| Plugin syntax | `vol.py -f dump pslist` | `vol3 -f dump windows.pslist` |\n| Module naming | `pslist` | `windows.pslist.PsList` |\n| OS support | Manual profile selection | Symbol table auto-download |\n\n### VMware .vmem Files\n\nVMware snapshots produce `.vmem` files — raw guest physical memory dumps. These are directly compatible with Volatility. The corresponding `.vmss` or `.vmsn` file contains CPU state but is not required for most memory analysis.\n\n### Credential Extraction with hashdump\n\nThe `windows.hashdump` plugin extracts NTLM password hashes from the SAM registry hive in memory. These hashes can be:\n- Cracked offline with hashcat/john\n- Used for pass-the-hash attacks\n- Compared against known breach databases\n\n### MS Paint Image Recovery\n\nMS Paint (`mspaint.exe`) keeps the active canvas in process memory as a bitmap. The technique:\n1. Find `mspaint.exe` PID with `pslist`\n2. Dump all memory pages with `memmap --dump`\n3. Rename the dump to `.data` and open in GIMP with raw import\n4. Adjust width/height/offset until the image appears correctly\n\nThis is a creative forensics technique because the image data persists in memory even after the application appears closed.",
+    "content": "## Volatility 3 and VMware Memory Analysis\n\n### Volatility 2 vs Volatility 3\n\nVolatility 3 is a complete rewrite with a different command syntax:\n\n| Feature | Volatility 2 | Volatility 3 |\n|---------|-------------|-------------|\n| Profile | `--profile=Win7SP1x64` | Auto-detected via ISF symbols |\n| Plugin syntax | `vol.py -f dump pslist` | `vol -f dump windows.pslist` |\n| Module naming | `pslist` | `windows.pslist.PsList` |\n| OS support | Manual profile selection | Symbol table auto-download |\n\n### VMware .vmem Files\n\nVMware snapshots produce `.vmem` files — raw guest physical memory dumps. These are directly compatible with Volatility. The corresponding `.vmss` or `.vmsn` file contains CPU state but is not required for most memory analysis.\n\n### Credential Extraction with hashdump\n\nThe `windows.hashdump` plugin extracts NTLM password hashes from the SAM registry hive in memory. These hashes can be:\n- Cracked offline with hashcat/john\n- Used for pass-the-hash attacks\n- Compared against known breach databases\n\n### MS Paint Image Recovery\n\nMS Paint (`mspaint.exe`) keeps the active canvas in process memory as a bitmap. The technique:\n1. Find `mspaint.exe` PID with `pslist`\n2. Dump all memory pages with `memmap --dump`\n3. Rename the dump to `.data` and open in GIMP with raw import\n4. Adjust width/height/offset until the image appears correctly\n\nThis is a creative forensics technique because the image data persists in memory even after the application appears closed.",
     "toolReferences": [
       {
         "tool": "Volatility 3",
         "commands": [
-          "vol3 -f memory.vmem windows.info",
-          "vol3 -f memory.vmem windows.pstree",
-          "vol3 -f memory.vmem windows.netscan",
-          "vol3 -f memory.vmem windows.hashdump",
-          "vol3 -f memory.vmem windows.memmap --pid <pid> --dump"
+          "vol -f memory.vmem windows.info",
+          "vol -f memory.vmem windows.pstree",
+          "vol -f memory.vmem windows.netscan",
+          "vol -f memory.vmem windows.hashdump",
+          "vol -f memory.vmem windows.memmap --pid <pid> --dump"
         ]
       },
       {
@@ -47,31 +47,31 @@
       {
         "stepNumber": 1,
         "description": "Identify the operating system",
-        "command": "vol3 -f memory.vmem windows.info",
+        "command": "vol -f memory.vmem windows.info",
         "explanation": "Volatility 3's windows.info plugin automatically determines the OS version and architecture without requiring a manual profile selection. This confirms the Windows version and build number."
       },
       {
         "stepNumber": 2,
         "description": "Build process tree",
-        "command": "vol3 -f memory.vmem windows.pstree",
+        "command": "vol -f memory.vmem windows.pstree",
         "explanation": "Visualize the process hierarchy to identify all running applications. Note processes like mspaint.exe, ftp.exe, or browser processes that indicate user activity worth investigating."
       },
       {
         "stepNumber": 3,
         "description": "Extract password hashes",
-        "command": "vol3 -f memory.vmem windows.hashdump",
+        "command": "vol -f memory.vmem windows.hashdump",
         "explanation": "Extract NTLM hashes from the SAM registry hive in memory. This reveals all local user accounts and their password hashes, which can be cracked offline or looked up in rainbow tables."
       },
       {
         "stepNumber": 4,
         "description": "Analyze network connections",
-        "command": "vol3 -f memory.vmem windows.netscan",
+        "command": "vol -f memory.vmem windows.netscan",
         "explanation": "List all network connections with PIDs, local/remote addresses, and ports. Look for FTP connections (port 21) to identify file transfer activity and the remote server involved."
       },
       {
         "stepNumber": 5,
         "description": "Dump MS Paint process memory",
-        "command": "vol3 -f memory.vmem windows.memmap --pid <mspaint_pid> --dump",
+        "command": "vol -f memory.vmem windows.memmap --pid <mspaint_pid> --dump",
         "explanation": "Dump all memory pages belonging to the mspaint.exe process. The canvas bitmap data is stored in these memory pages and can be recovered as a raw image."
       },
       {

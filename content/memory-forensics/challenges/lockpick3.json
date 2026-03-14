@@ -8,17 +8,17 @@
   "keyTakeaway": "Linux memory forensics with Volatility 3 — building custom symbol tables for Ubuntu with kernel 5.4.0-163-generic, using banners plugin for profile identification, and performing ransomware timeline analysis",
   "tags": ["Volatility 3", "Linux symbols", "ransomware", "Ubuntu", "timeline analysis", "banners", "custom ISF"],
   "fundamentals": {
-    "content": "## Volatility 3 Linux Analysis and Symbol Tables\n\n### Volatility 3 Symbol Tables (ISF)\n\nVolatility 3 replaced Volatility 2's profile system with Intermediate Symbol Format (ISF) files. For Linux:\n\n1. **ISF JSON files** contain kernel type definitions and symbol addresses\n2. **dwarf2json** tool converts DWARF debug info to ISF format\n3. Symbols must match the exact kernel version (e.g., `5.4.0-163-generic`)\n\n### Building Custom Linux Symbols for Volatility 3\n\n```bash\n# Download debug symbols for the target kernel\napt install linux-image-5.4.0-163-generic-dbgsym\n\n# Convert to ISF format\ndwarf2json linux \\\n  --elf /usr/lib/debug/boot/vmlinux-5.4.0-163-generic \\\n  --system-map /boot/System.map-5.4.0-163-generic \\\n  > linux-5.4.0-163-generic.json\n\n# Place in Volatility 3 symbols directory\ncp linux-5.4.0-163-generic.json volatility3/symbols/linux/\n```\n\n### The banners Plugin\n\nVolatility 3's `banners` plugin scans memory for Linux kernel version strings (the banner printed at boot). This identifies the exact kernel version without needing prior knowledge:\n\n```bash\nvol3 -f memory.lime banners\n# Output: Linux version 5.4.0-163-generic (buildd@...) (gcc ...)\n```\n\n### Ransomware Investigation in Memory\n\nRansomware investigations in memory focus on:\n\n| Evidence | How to Find It |\n|----------|---------------|\n| Ransomware process | pslist/pstree — unusual binary names |\n| Encryption activity | open file handles to encrypted files |\n| Ransom note | filescan/strings — note content in memory |\n| Encryption keys | strings/memdump — keys may persist in process memory |\n| Timeline | process start times + file timestamps |\n| Lateral movement | network connections to internal hosts |",
+    "content": "## Volatility 3 Linux Analysis and Symbol Tables\n\n### Volatility 3 Symbol Tables (ISF)\n\nVolatility 3 replaced Volatility 2's profile system with Intermediate Symbol Format (ISF) files. For Linux:\n\n1. **ISF JSON files** contain kernel type definitions and symbol addresses\n2. **dwarf2json** tool converts DWARF debug info to ISF format\n3. Symbols must match the exact kernel version (e.g., `5.4.0-163-generic`)\n\n### Building Custom Linux Symbols for Volatility 3\n\n```bash\n# Download debug symbols for the target kernel\napt install linux-image-5.4.0-163-generic-dbgsym\n\n# Convert to ISF format\ndwarf2json linux \\\n  --elf /usr/lib/debug/boot/vmlinux-5.4.0-163-generic \\\n  --system-map /boot/System.map-5.4.0-163-generic \\\n  > linux-5.4.0-163-generic.json\n\n# Place in Volatility 3 symbols directory\ncp linux-5.4.0-163-generic.json volatility3/symbols/linux/\n```\n\n### The banners Plugin\n\nVolatility 3's `banners` plugin scans memory for Linux kernel version strings (the banner printed at boot). This identifies the exact kernel version without needing prior knowledge:\n\n```bash\nvol -f memory.lime banners\n# Output: Linux version 5.4.0-163-generic (buildd@...) (gcc ...)\n```\n\n### Ransomware Investigation in Memory\n\nRansomware investigations in memory focus on:\n\n| Evidence | How to Find It |\n|----------|---------------|\n| Ransomware process | pslist/pstree — unusual binary names |\n| Encryption activity | open file handles to encrypted files |\n| Ransom note | filescan/strings — note content in memory |\n| Encryption keys | strings/memdump — keys may persist in process memory |\n| Timeline | process start times + file timestamps |\n| Lateral movement | network connections to internal hosts |",
     "toolReferences": [
       {
         "tool": "Volatility 3 (Linux)",
         "commands": [
-          "vol3 -f memory.lime banners",
-          "vol3 -f memory.lime linux.pslist",
-          "vol3 -f memory.lime linux.pstree",
-          "vol3 -f memory.lime linux.bash",
-          "vol3 -f memory.lime linux.check_modules",
-          "vol3 -f memory.lime linux.proc.Maps --pid <pid>"
+          "vol -f memory.lime banners",
+          "vol -f memory.lime linux.pslist",
+          "vol -f memory.lime linux.pstree",
+          "vol -f memory.lime linux.bash",
+          "vol -f memory.lime linux.check_modules",
+          "vol -f memory.lime linux.proc.Maps --pid <pid>"
         ]
       },
       {
@@ -47,7 +47,7 @@
       {
         "stepNumber": 1,
         "description": "Identify the kernel version",
-        "command": "vol3 -f memory.lime banners",
+        "command": "vol -f memory.lime banners",
         "explanation": "The banners plugin scans raw memory for the Linux kernel version string. This tells you the exact kernel version (5.4.0-163-generic) needed to build matching symbol tables."
       },
       {
@@ -59,19 +59,19 @@
       {
         "stepNumber": 3,
         "description": "List all processes",
-        "command": "vol3 -f memory.lime linux.pslist",
+        "command": "vol -f memory.lime linux.pslist",
         "explanation": "With the correct symbols loaded, enumerate all running processes. Look for unfamiliar process names, processes running from /tmp or /dev/shm, or processes with suspicious start times clustering around the incident window."
       },
       {
         "stepNumber": 4,
         "description": "Build the process tree",
-        "command": "vol3 -f memory.lime linux.pstree",
+        "command": "vol -f memory.lime linux.pstree",
         "explanation": "Visualize parent-child process relationships. The ransomware may have been spawned from a compromised service (web shell → bash → ransomware) or deployed via SSH (sshd → bash → ransomware)."
       },
       {
         "stepNumber": 5,
         "description": "Recover bash command history",
-        "command": "vol3 -f memory.lime linux.bash",
+        "command": "vol -f memory.lime linux.bash",
         "explanation": "Extract bash history from all user sessions in memory. This reveals the attack timeline — commands used for reconnaissance, privilege escalation, ransomware deployment, and any cleanup attempts."
       },
       {

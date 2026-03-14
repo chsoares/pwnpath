@@ -68,8 +68,8 @@
         { "command": "x/10i $rip", "description": "Disassemble 10 instructions from current instruction pointer" },
         { "command": "set $rip = 0x401234", "description": "Change instruction pointer (skip code)" },
         { "command": "set *(int*)0x404000 = 1", "description": "Write a value to a memory address" },
-        { "command": "vmmap", "description": "(pwndbg) Show memory map of the process" },
-        { "command": "telescope $rsp 20", "description": "(pwndbg) Dereference and display 20 stack entries" }
+        { "command": "vmmap", "description": "(GEF) Show memory map of the process" },
+        { "command": "telescope $rsp 20", "description": "(GEF) Dereference and display 20 stack entries" }
       ]
     },
     {

@@ -1,7 +1,7 @@
 {
   "id": "memory-forensics",
   "name": "Memory Forensics",
-  "overview": "Memory forensics is the analysis of volatile data captured from a system's RAM. Unlike disk forensics, memory analysis reveals what was actively running at the time of capture — processes, network connections, injected code, encryption keys, clipboard contents, and command history that may never touch disk.\n\nIn this learning path, you'll master Volatility (both v2 and v3), progressing from basic process listing and command history recovery to advanced techniques like detecting reflective DLL injection, analyzing Linux rootkits, and building custom Volatility profiles. You'll work with real HackTheBox Sherlocks and Challenges that simulate real-world incident response scenarios.",
+  "overview": "Memory forensics is the analysis of volatile data captured from a system's RAM. Unlike disk forensics, memory analysis reveals what was actively running at the time of capture — processes, network connections, injected code, encryption keys, clipboard contents, and command history that may never touch disk.\n\nIn this learning path, you'll master Volatility 3 (the current standard), progressing from basic process listing and command-line analysis to advanced techniques like detecting reflective DLL injection, analyzing Linux rootkits, and building custom symbol tables. Volatility 2 is covered only where specific plugins have not yet been ported to v3 (e.g., TrueCrypt passphrase recovery, advanced Linux rootkit detection). You'll work with real HackTheBox Sherlocks and Challenges that simulate real-world incident response scenarios.",
   "prerequisites": [
     "Basic understanding of operating system internals (processes, memory, DLLs)",
     "Familiarity with command-line interfaces (both Linux and Windows)",
@@ -19,7 +19,7 @@
     },
     {
       "name": "Volatility 2",
-      "description": "Legacy but still widely used — some plugins and profiles not yet ported to v3. Required for certain challenges",
+      "description": "Legacy framework — only needed for specific plugins not yet ported to v3 (TrueCrypt recovery, advanced Linux rootkit detection, dlldump with source modification). Not required for most challenges",
       "installCommands": {
         "linux": "git clone https://github.com/volatilityfoundation/volatility (requires Python 2)",
         "macos": "git clone https://github.com/volatilityfoundation/volatility",
@@ -45,5 +45,5 @@
       }
     }
   ],
-  "entryRecommendation": "Start with **Export** if you're completely new to memory forensics — it introduces basic Volatility commands like `pslist` and `cmdscan` on a simple Windows memory dump. If you're already familiar with Volatility basics, skip to **Recollection** for a comprehensive 15-question Sherlock that covers the full analysis workflow. For Linux memory forensics, start at **APTNightmare** (position 8)."
+  "entryRecommendation": "Start with **Export** if you're completely new to memory forensics — it introduces basic Volatility 3 commands like `windows.pslist` and `windows.cmdline` on a simple Windows memory dump. If you're already familiar with Volatility basics, skip to **Recollection** for a comprehensive 15-question Sherlock that covers the full analysis workflow. For Linux memory forensics, start at **APTNightmare** (position 8)."
 }

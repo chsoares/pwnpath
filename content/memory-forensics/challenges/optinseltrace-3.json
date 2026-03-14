@@ -13,11 +13,11 @@
       {
         "tool": "Volatility 3",
         "commands": [
-          "vol3 -f memory.raw windows.filescan | grep -iE '.vbs|.ps1|.bat|.hta'",
-          "vol3 -f memory.raw windows.dumpfiles --virtaddr <offset>",
-          "vol3 -f memory.raw windows.psscan",
-          "vol3 -f memory.raw windows.handles --pid <pid>",
-          "vol3 -f memory.raw windows.malfind"
+          "vol -f memory.raw windows.filescan | grep -iE '.vbs|.ps1|.bat|.hta'",
+          "vol -f memory.raw windows.dumpfiles --virtaddr <offset>",
+          "vol -f memory.raw windows.psscan",
+          "vol -f memory.raw windows.handles --pid <pid>",
+          "vol -f memory.raw windows.malfind"
         ]
       },
       {
@@ -48,13 +48,13 @@
       {
         "stepNumber": 1,
         "description": "Scan for script files in memory",
-        "command": "vol3 -f memory.raw windows.filescan | grep -iE '.vbs|.ps1|.bat|.hta|.doc'",
+        "command": "vol -f memory.raw windows.filescan | grep -iE '.vbs|.ps1|.bat|.hta|.doc'",
         "explanation": "Locate the initial attack scripts cached in memory. The filescan output reveals VBScript and PowerShell files that were executed during the compromise, along with their virtual addresses for extraction."
       },
       {
         "stepNumber": 2,
         "description": "Dump the malicious scripts",
-        "command": "vol3 -f memory.raw windows.dumpfiles --virtaddr <vbs_offset>",
+        "command": "vol -f memory.raw windows.dumpfiles --virtaddr <vbs_offset>",
         "explanation": "Extract the VBScript dropper from memory. This file contains the first stage of the attack and will reveal how subsequent stages are loaded."
       },
       {
@@ -66,13 +66,13 @@
       {
         "stepNumber": 4,
         "description": "Find all PowerShell processes including terminated ones",
-        "command": "vol3 -f memory.raw windows.psscan | grep -i powershell",
+        "command": "vol -f memory.raw windows.psscan | grep -i powershell",
         "explanation": "psscan searches for EPROCESS structures by scanning memory pool tags, finding even terminated or hidden processes. This catches PowerShell instances that may have already exited but whose structures remain in memory."
       },
       {
         "stepNumber": 5,
         "description": "Examine process handles for file access",
-        "command": "vol3 -f memory.raw windows.handles --pid <ps_pid>",
+        "command": "vol -f memory.raw windows.handles --pid <ps_pid>",
         "explanation": "List all handles (files, registry keys, mutexes) held by the PowerShell process. This reveals what files the script accessed, what registry keys it modified, and any synchronization objects it created."
       },
       {

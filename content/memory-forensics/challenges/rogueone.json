@@ -11,14 +11,14 @@
     "content": "## Process Spoofing and C2 Detection\n\n### The Process Masquerade Technique\n\nAttackers frequently rename their malware to match legitimate Windows process names (svchost.exe, explorer.exe, csrss.exe) to blend in. This is MITRE ATT&CK T1036.005 (Masquerading: Match Legitimate Name or Location). The key tells are:\n\n| Indicator | Legitimate | Suspicious |\n|-----------|-----------|------------|\n| Parent process | svchost.exe → services.exe | svchost.exe → explorer.exe |\n| Binary path | C:\\Windows\\System32\\ | C:\\Users\\, C:\\Temp\\, Desktop |\n| Command line | `-k DcomLaunch` (service group) | No arguments or unusual args |\n| Instance count | Multiple svchost.exe expected | Unusual count for the process |\n\n### Detecting Code Injection with malfind\n\nThe `malfind` plugin detects injected code by scanning process memory for regions that are:\n- **Executable** (PAGE_EXECUTE_READWRITE permissions)\n- **Not backed by a file on disk** (no associated DLL or image)\n- **Contain executable code** (MZ header or shellcode patterns)\n\nLegitimate processes rarely have executable anonymous memory regions. When malfind flags a standard Windows process, it strongly indicates code injection.\n\n### SIEM vs. Task Manager\n\nA common scenario: the security team's SIEM alerts on suspicious network traffic, but Task Manager on the endpoint shows nothing unusual. This disconnect happens because:\n1. The malware uses a legitimate-looking process name\n2. Task Manager doesn't show network connections per process (use netstat/netscan)\n3. The malicious activity is inside an injected thread within a legitimate process",
     "toolReferences": [
       {
-        "tool": "Volatility 2",
+        "tool": "Volatility 3",
         "commands": [
-          "vol.py -f memory.raw --profile=<profile> pstree",
-          "vol.py -f memory.raw --profile=<profile> cmdline",
-          "vol.py -f memory.raw --profile=<profile> malfind -p <pid>",
-          "vol.py -f memory.raw --profile=<profile> netscan | grep <pid>",
-          "vol.py -f memory.raw --profile=<profile> dlllist -p <pid>",
-          "vol.py -f memory.raw --profile=<profile> procdump -p <pid> -D ./dump/"
+          "vol -f memory.raw windows.pstree",
+          "vol -f memory.raw windows.cmdline",
+          "vol -f memory.raw windows.malfind --pid <pid>",
+          "vol -f memory.raw windows.netscan | grep <pid>",
+          "vol -f memory.raw windows.dlllist --pid <pid>",
+          "vol -f memory.raw windows.pslist --dump --pid <pid>"
         ]
       }
     ]
@@ -26,13 +26,13 @@
   "hints": {
     "hints": [
       "The SIEM detected C2 traffic but Task Manager looks clean — this suggests the malicious process is masquerading as a legitimate one.",
-      "Use pstree to check parent-child relationships. Legitimate Windows processes have specific expected parents (svchost → services.exe, etc.).",
-      "Use cmdline to check the binary path and arguments for each process. A legitimate svchost.exe runs from System32 with service group arguments.",
-      "Run malfind to detect code injection. If a 'legitimate' process has injected executable memory, it's been compromised.",
-      "Cross-reference malfind results with netscan — the injected process may have outbound connections to a C2 server.",
+      "Use windows.pstree to check parent-child relationships. Legitimate Windows processes have specific expected parents (svchost → services.exe, etc.).",
+      "Use windows.cmdline to check the binary path and arguments for each process. A legitimate svchost.exe runs from System32 with service group arguments.",
+      "Run windows.malfind to detect code injection. If a 'legitimate' process has injected executable memory, it's been compromised.",
+      "Cross-reference windows.malfind results with windows.netscan — the injected process may have outbound connections to a C2 server.",
       "Look at the specific C2 IP and port. Known C2 frameworks like Cobalt Strike often use specific default ports.",
       "The attacker's process may have been spawned at a suspicious time — compare process start times with the incident timeline.",
-      "Dump the suspicious process with procdump and check its hash against VirusTotal or similar services."
+      "Dump the suspicious process with windows.pslist --dump and check its hash against VirusTotal or similar services."
     ]
   },
   "solution": {
@@ -41,38 +41,38 @@
       {
         "stepNumber": 1,
         "description": "Build the process tree",
-        "command": "vol.py -f memory.raw --profile=<profile> pstree",
+        "command": "vol -f memory.raw windows.pstree",
         "explanation": "Examine the full process hierarchy. Look for processes with incorrect parent-child relationships — a process named svchost.exe whose parent is not services.exe, or an explorer.exe spawned by something other than userinit.exe."
       },
       {
         "stepNumber": 2,
         "description": "Check process command lines and binary paths",
-        "command": "vol.py -f memory.raw --profile=<profile> cmdline",
+        "command": "vol -f memory.raw windows.cmdline",
         "explanation": "Review the full command line for every process. Legitimate svchost.exe instances show service group flags (-k DcomLaunch, -k netsvcs). A spoofed process will have missing arguments or run from an unusual path like the user's Desktop or Temp folder."
       },
       {
         "stepNumber": 3,
         "description": "Detect code injection",
-        "command": "vol.py -f memory.raw --profile=<profile> malfind",
-        "explanation": "malfind scans all processes for injected executable code. It identifies memory regions with PAGE_EXECUTE_READWRITE protection that aren't backed by files on disk. Flagged regions in standard Windows processes indicate process injection."
+        "command": "vol -f memory.raw windows.malfind",
+        "explanation": "windows.malfind scans all processes for injected executable code. It identifies memory regions with PAGE_EXECUTE_READWRITE protection that aren't backed by files on disk. Flagged regions in standard Windows processes indicate process injection."
       },
       {
         "stepNumber": 4,
         "description": "Correlate with network connections",
-        "command": "vol.py -f memory.raw --profile=<profile> netscan",
+        "command": "vol -f memory.raw windows.netscan",
         "explanation": "List all network connections with their owning PIDs. Cross-reference the PID of the suspicious process from malfind with outbound connections. The C2 channel will show as an established TCP connection to an external IP."
       },
       {
         "stepNumber": 5,
         "description": "Examine the spoofed process details",
-        "command": "vol.py -f memory.raw --profile=<profile> dlllist -p <suspicious_pid>",
+        "command": "vol -f memory.raw windows.dlllist --pid <suspicious_pid>",
         "explanation": "List the DLLs loaded by the suspicious process. A truly spoofed process will either have an unusual set of loaded DLLs or the main executable path will differ from the expected System32 location."
       },
       {
         "stepNumber": 6,
         "description": "Dump the malicious process",
-        "command": "vol.py -f memory.raw --profile=<profile> procdump -p <suspicious_pid> -D ./dump/",
-        "explanation": "Extract the process executable from memory for further analysis. Calculate its hash and compare against threat intelligence databases to identify the specific malware family or C2 framework being used."
+        "command": "vol -f memory.raw windows.pslist --dump --pid <suspicious_pid>",
+        "explanation": "Extract the process executable from memory for further analysis. In Volatility 3, use windows.pslist with --dump and --pid to dump a specific process. Calculate its hash and compare against threat intelligence databases to identify the specific malware family or C2 framework being used."
       }
     ]
   },
