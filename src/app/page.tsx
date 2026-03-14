@@ -21,7 +21,7 @@ export default function Home() {
           topics, with structured lessons, hints, and walkthroughs.
         </p>
       </div>
-      <div className="grid auto-rows-fr gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {categories.map((cat) => (
           <CategoryCard key={cat.id} category={cat} />
         ))}

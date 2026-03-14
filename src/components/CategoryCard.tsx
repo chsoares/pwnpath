@@ -22,7 +22,7 @@ export default function CategoryCard({
   const icon = iconMap[category.icon] ?? "folder";
 
   const card = (
-    <div className="group relative flex flex-col rounded-lg border border-drac-border bg-drac-bg p-5 transition-all hover:border-drac-purple/50 hover:bg-drac-hover">
+    <div className="group relative flex h-full min-h-72 flex-col rounded-lg border border-drac-border bg-drac-bg p-5 transition-all hover:border-drac-purple/50 hover:bg-drac-hover">
       {!isAvailable && <ComingSoon />}
       <div className="mb-3 flex items-center gap-3">
         <span className="material-symbols-outlined text-2xl text-drac-pink">
@@ -57,7 +57,7 @@ export default function CategoryCard({
   if (!isAvailable) return card;
 
   return (
-    <Link href={`/${category.id}`} className="block">
+    <Link href={`/${category.id}`} className="block h-full">
       {card}
     </Link>
   );
