@@ -102,6 +102,24 @@ Solutions must be **real walkthroughs**, not expanded hints. Each must include:
 4. Update `categories.json` — set `status: "available"`, update `challengeCount`
 5. Run `pnpm build` to verify
 
+## Trail Gap Analysis (when reviewing/expanding a trail)
+
+When auditing or testing a learning trail, check for **concept gaps** and **broken references**:
+
+1. **List all techniques taught** in the trail (from each challenge's `keyTakeaway`)
+2. **List all techniques the domain requires** — what should a student know by the end?
+3. **Identify gaps** (missing concepts) and **redundancies** (repeated concepts with no new value)
+4. **Prioritize gaps**: High = fundamental concept (e.g., canary bypass), Medium = secondary technique, Low = niche/already partially covered
+5. **Research HTB challenges** to fill gaps — use official CTF repos (e.g., `github.com/hackthebox/cyber-apocalypse-2025`), 7Rocky's index, writeup searches
+6. **Place new challenges** respecting the prerequisite chain — never reference a concept before it's taught
+7. **Walk the trail as a student** — read each lesson's fundamentals in order, flag anything that appears without introduction
+
+### Common pitfalls to catch
+- Lesson says "in the previous challenge you learned X" but X was never taught
+- Every challenge has "No canary found" but canary bypass is never introduced
+- A protection (NX, PIE, ASLR) is always disabled but never taught as an obstacle
+- Difficulty jumps without bridging concepts
+
 ## Adding a New Challenge
 1. Create `content/<category>/challenges/<challenge-id>.json` following the ChallengeLesson schema in `src/lib/types.ts`
 2. Add entry to `path.json` with correct position
