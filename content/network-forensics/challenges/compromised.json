@@ -5,93 +5,91 @@
   "htbUrl": "https://app.hackthebox.com/sherlocks/Compromised",
   "difficulty": "easy",
   "estimatedTime": "2-3 hours",
-  "keyTakeaway": "Malware traffic analysis — Pikabot delivery via HTTP, self-signed TLS C2 channels, and DNS tunneling detection",
-  "tags": ["wireshark", "malware", "pikabot", "tls", "dns-tunneling", "c2", "virustotal"],
+  "keyTakeaway": "Malware traffic analysis — tracing the full infection lifecycle from delivery (MIME mismatch) through C2 (self-signed TLS certificates) to exfiltration (DNS tunneling)",
+  "tags": ["wireshark", "malware", "pikabot", "tls", "dns-tunneling", "c2", "virustotal", "export-objects", "sha256"],
   "fundamentals": {
-    "content": "## Malware Traffic Analysis (MTA)\n\n### The Malware Delivery → C2 → Exfiltration Pattern\n\nMost malware infections follow a predictable network pattern:\n\n1. **Delivery**: Malware binary is downloaded (often disguised as a legitimate file type)\n2. **C2 Establishment**: Malware calls home to the attacker's command & control server\n3. **Data Exfiltration**: Stolen data is sent out, often through a covert channel\n\nEach phase has distinct network indicators that you can identify in a PCAP.\n\n### Analyzing Malware Delivery via HTTP\n\nAttackers often disguise malware by setting misleading MIME types:\n- A file served as `image/gif` might actually be a PE32 executable\n- Use Wireshark's `File > Export Objects > HTTP` to extract downloaded files\n- Run `file <filename>` on extracted files to identify their true type\n- Hash the file with `sha256sum` and search on VirusTotal for identification\n\n### TLS/SSL Certificate Analysis\n\nMalware C2 often uses HTTPS with **self-signed certificates** on non-standard ports:\n- **Self-signed**: Issuer == Subject fields in the certificate\n- **Non-standard ports**: Ports like 2078, 2222, 32999 instead of 443\n- **Suspicious certificate fields**: Random strings in locality, organization, etc.\n\nWireshark filter to inspect certificates:\n```\ntls.handshake.type == 11\n```\n(Type 11 = Certificate message in TLS handshake)\n\n### DNS Tunneling as Exfiltration\n\nWhen DNS traffic accounts for an abnormally high percentage of total packets (check `Statistics > Protocol Hierarchy`), it's a strong indicator of DNS tunneling. Look for thousands of queries to subdomains of a single root domain.",
+    "content": "## Malware Traffic Analysis (MTA)\n\nThis challenge puts together several concepts from previous lessons — HTTP analysis, TLS certificate inspection, and DNS tunneling — into a realistic malware infection scenario. You'll trace the full lifecycle: delivery, C2 establishment, and data exfiltration.\n\n### The Malware Infection Lifecycle\n\nMost malware infections follow a predictable network pattern:\n\n1. **Delivery**: Malware binary is downloaded (often disguised as a legitimate file type)\n2. **C2 Establishment**: Malware calls home to the attacker's command & control server\n3. **Data Exfiltration**: Stolen data is sent out through a covert channel\n\nEach phase has distinct network indicators.\n\n### Phase 1: Detecting Malware Delivery via HTTP\n\nAttackers often disguise malware by setting misleading MIME types in HTTP responses:\n- A file served as `image/gif` might actually be a PE32 executable (DLL)\n- A `.jpg` might be a script\n\nTo detect this:\n1. Use `File → Export Objects → HTTP` to extract downloaded files\n2. Run `file <filename>` to identify the true file type\n3. Compute `sha256sum <filename>` and search on **VirusTotal** for identification\n\nVirusTotal provides: malware family name, detection count, first-seen-in-the-wild date, and community analysis.\n\n### Phase 2: TLS/SSL Certificate Analysis for C2\n\nMalware C2 often uses HTTPS with **self-signed certificates** on non-standard ports. Key indicators:\n\n| Normal TLS | Malware C2 TLS |\n|-----------|----------------|\n| Port 443 | Non-standard ports (2078, 2222, 32999) |\n| CA-signed cert (Issuer ≠ Subject) | Self-signed (Issuer == Subject) |\n| Real organization names | Random/absurd strings in cert fields |\n\nWireshark filter to inspect certificates:\n```\ntls.handshake.type == 11\n```\nType 11 = Certificate message in the TLS handshake. Expand the certificate to compare Issuer and Subject fields.\n\n### Phase 3: DNS Tunneling for Exfiltration\n\nAs you learned in Litter, DNS tunneling shows as an anomalous DNS percentage in `Statistics → Protocol Hierarchy`. In malware infections, DNS tunneling is often used for data exfiltration because it bypasses most firewall rules.\n\nUse tshark to identify the tunneling domain:\n```bash\ntshark -r capture.pcap -Y 'dns.qry.type == 1' -T fields -e dns.qry.name \\\n  | sort | uniq -c | sort -rn | head -20\n```\n\n### Hashing and VirusTotal Workflow\n\n```bash\n# Extract file from PCAP\n# File → Export Objects → HTTP → Save\n\n# Check true file type\nfile extracted_file\n\n# Compute hash\nsha256sum extracted_file\n\n# Search on VirusTotal: virustotal.com → Search → paste hash\n```\n\nVirusTotal's **Details** tab shows \"First Seen In The Wild\" — the earliest known observation of the malware.",
     "toolReferences": [
       {
         "tool": "Wireshark",
         "commands": [
-          "File > Export Objects > HTTP",
-          "Statistics > Protocol Hierarchy",
-          "Filter: http",
-          "Filter: tls.handshake.type == 11",
-          "Filter: dns.qry.name contains \"<domain>\"",
-          "Expand TLS certificate: Issuer vs Subject comparison"
+          "File → Export Objects → HTTP — extract downloaded files",
+          "Statistics → Protocol Hierarchy — detect anomalous DNS volume",
+          "Filter: http — find initial delivery",
+          "Filter: tls.handshake.type == 11 — TLS certificate messages",
+          "Filter: dns — DNS traffic for tunneling analysis"
         ]
       },
       {
         "tool": "CLI",
         "commands": [
-          "sha256sum <extracted_file>",
-          "file <extracted_file>",
-          "tshark -r capture.pcap -Y 'dns.qry.type == 1' -T fields -e dns.qry.name | sort | uniq -c | sort -rn | head -20"
+          "file <filename> — identify true file type",
+          "sha256sum <filename> — compute hash for VirusTotal",
+          "tshark -r file.pcap -Y 'dns.qry.type == 1' -T fields -e dns.qry.name | sort | uniq -c | sort -rn | head -20"
         ]
       }
     ]
   },
   "hints": {
     "hints": [
-      "Start with `http` filter — look for the first HTTP download to the victim IP. Something is being served with a misleading MIME type.",
-      "Export the suspicious HTTP object and check its real file type with `file` and `sha256sum`. Search the hash on VirusTotal.",
-      "VirusTotal will give you the malware family name and the 'First Seen In The Wild' date.",
-      "For TLS analysis, filter `tls.handshake.type == 11` to see certificate exchanges. A self-signed cert has Issuer == Subject.",
-      "Check which non-standard ports have self-signed TLS certificates — these are the C2 channels.",
-      "Inside the first C2 certificate, expand the Subject fields to find the locality name (id-at-localityName).",
-      "For the DNS tunneling domain, check Protocol Hierarchy for anomalous DNS volume, then examine what domain all those queries are for."
+      "Start with `http` filter — look for the first HTTP download to the victim IP. The server claims it's an image, but is it really?",
+      "Export the suspicious HTTP object and check its real file type with `file` and `sha256sum`. Search the hash on VirusTotal — it identifies the malware family and first-seen date.",
+      "For TLS analysis, filter `tls.handshake.type == 11` to see certificate exchanges. A self-signed cert has matching Issuer and Subject fields.",
+      "Check which non-standard ports have self-signed TLS certificates — list them from smallest to largest.",
+      "Inside the first C2 certificate, expand the Subject fields to find unusual strings in locality, organization, etc.",
+      "For the DNS tunneling domain, check Protocol Hierarchy for anomalous DNS volume, then use tshark to find which domain all those queries target."
     ]
   },
   "solution": {
-    "content": "## Full Walkthrough\n\n**Scenario:** SOC detected suspicious network activity from a workstation. You're given a PCAP (39,106 packets) of a Pikabot malware compromise.\n\n**Victim IP:** `172.16.1.191`\n\nThe analysis follows the classic malware infection lifecycle: delivery → C2 establishment → exfiltration.",
+    "content": "## Full Walkthrough\n\n**Scenario:** SOC detected suspicious network activity from a workstation. You're given a PCAP (39,106 packets) to investigate a malware compromise. The analysis traces the full infection lifecycle: delivery via HTTP, C2 via self-signed TLS, and exfiltration via DNS tunneling.\n\n**Key learning:** This challenge ties together three separate techniques you've already learned (HTTP analysis, TLS inspection, DNS tunneling) into a single realistic malware investigation. This is how real infections look in PCAPs.\n\n**Victim IP:** `172.16.1.191`",
     "steps": [
       {
         "stepNumber": 1,
         "description": "Find the initial access IP (malware delivery server)",
         "command": "Wireshark filter: http",
-        "explanation": "Filter for HTTP traffic. The first HTTP GET request from the victim `172.16.1.191` goes to `162.252.172.54`. The server responds with `Content-Type: image/gif`, but the actual content is a PE32 executable (a classic MIME-type mismatch evasion). You can also use `File > Export Objects > HTTP` to see the file `6ctf5JL`. **Answer: `162.252.172.54`**"
+        "explanation": "Filter for HTTP traffic. The first HTTP GET request from the victim `172.16.1.191` goes to an external IP. The server responds with `Content-Type: image/gif`, but the actual content is a PE32 executable — a classic MIME-type mismatch to evade detection. You can also use `File → Export Objects → HTTP` to see the downloaded file.\n\n**Answer:** `162.252.172.54`"
       },
       {
         "stepNumber": 2,
         "description": "Extract the malware and compute its SHA256 hash",
-        "command": "File > Export Objects > HTTP → save '6ctf5JL' → sha256sum 6ctf5JL",
-        "explanation": "Export the file from Wireshark via `File > Export Objects > HTTP`. Save `6ctf5JL` to disk. Verify its true type:\n```bash\nfile 6ctf5JL\n# Output: PE32 executable (DLL)\nsha256sum 6ctf5JL\n# Output: 9b8ffdc8ba2b2caa485cca56a82b2dcbd251f65fb30bc88f0ac3da6704e4d3c6\n```\n**Answer: `9b8ffdc8ba2b2caa485cca56a82b2dcbd251f65fb30bc88f0ac3da6704e4d3c6`**"
+        "command": "File → Export Objects → HTTP → save file → sha256sum",
+        "explanation": "Export the file from Wireshark via `File → Export Objects → HTTP`. Save the file (named `6ctf5JL`) to disk. Verify its true type and compute the hash:\n\n```bash\nfile 6ctf5JL        # PE32 executable (DLL)\nsha256sum 6ctf5JL   # hash for VirusTotal lookup\n```\n\n**Answer:** `9b8ffdc8ba2b2caa485cca56a82b2dcbd251f65fb30bc88f0ac3da6704e4d3c6`"
       },
       {
         "stepNumber": 3,
         "description": "Identify the malware family on VirusTotal",
         "command": "Search SHA256 hash on virustotal.com",
-        "explanation": "Search the hash on VirusTotal. The file is flagged by ~60 vendors. The family label is **pikabot** — a loader malware that shares infrastructure patterns with the older Qakbot. **Answer: `pikabot`**"
+        "explanation": "Search the hash on VirusTotal. The file is flagged by ~60 vendors. The consensus family label identifies the malware — a loader that shares infrastructure patterns with the older Qakbot.\n\n**Answer:** `pikabot`"
       },
       {
         "stepNumber": 4,
         "description": "Find when the malware was first seen in the wild",
-        "command": "VirusTotal > Details tab > 'First Seen In The Wild'",
-        "explanation": "On the VirusTotal results page, navigate to the Details tab. The 'First Seen In The Wild' timestamp is `2023-05-19 14:01:21 UTC`. **Answer: `2023-05-19 14:01:21`**"
+        "command": "VirusTotal → Details tab → 'First Seen In The Wild'",
+        "explanation": "On the VirusTotal results page, navigate to the Details tab. The 'First Seen In The Wild' timestamp shows when the malware was first observed globally.\n\n**Answer:** `2023-05-19 14:01:21`"
       },
       {
         "stepNumber": 5,
         "description": "Find C2 ports using self-signed TLS certificates",
         "command": "Wireshark filter: tls.handshake.type == 11",
-        "explanation": "Filter for TLS Certificate messages. For each result, expand the TLS layer and inspect the certificate. A certificate is **self-signed** when the Issuer and Subject fields are identical. Three destination ports have self-signed certificates: **2078**, **2222**, and **32999** — all non-standard ports used by Pikabot for encrypted C2 communication. **Answer: `2078, 2222, 32999`**"
+        "explanation": "Filter for TLS Certificate messages (Type 11). For each result, expand the TLS layer and inspect the certificate. A certificate is **self-signed** when the Issuer and Subject fields are identical. Three destination ports have self-signed certificates — all non-standard ports used for encrypted C2 communication. List them from smallest to largest.\n\n**Answer:** `2078, 2222, 32999`"
       },
       {
         "stepNumber": 6,
         "description": "Extract the locality name from the first C2 certificate",
-        "command": "Wireshark filter: tls.handshake.type == 11 && tcp.port == 2078",
-        "explanation": "The first TLS C2 connection uses port 2078. Filter for its certificate exchange and expand:\n`Transport Layer Security > Handshake Protocol: Certificate > Certificates > Certificate > Subject`\n\nThe `id-at-localityName` field contains `Pyopneumopericardium` — a deliberately absurd string typical of Pikabot's auto-generated certificates. **Answer: `Pyopneumopericardium`**"
+        "command": "Wireshark: expand the certificate on port 2078 → Subject → id-at-localityName",
+        "explanation": "The first TLS C2 connection uses port 2078. In its certificate, expand:\n`Transport Layer Security → Handshake Protocol: Certificate → Certificates → Certificate → Subject`\n\nThe `id-at-localityName` field contains a deliberately absurd string typical of auto-generated malware certificates.\n\n**Answer:** `Pyopneumopericardium`"
       },
       {
         "stepNumber": 7,
         "description": "Find the certificate's notBefore timestamp",
-        "command": "Expand certificate > Validity > notBefore",
-        "explanation": "In the same certificate from step 6, expand `Validity > notBefore`. The timestamp is `2023-05-14 08:36:52 UTC` — the certificate was generated 5 days before the malware was first observed in the wild. **Answer: `2023-05-14 08:36:52`**"
+        "command": "Expand certificate → Validity → notBefore",
+        "explanation": "In the same certificate from step 6, expand `Validity → notBefore`. This shows when the certificate was generated — 5 days before the malware was first observed in the wild.\n\n**Answer:** `2023-05-14 08:36:52`"
       },
       {
         "stepNumber": 8,
-        "description": "Identify the DNS tunneling domain",
-        "command": "Wireshark: Statistics > Protocol Hierarchy (check DNS percentage), then filter: dns",
-        "explanation": "Check Protocol Hierarchy — DNS accounts for ~76% of all packets, which is massively anomalous. Filter for `dns` and examine the queries: thousands of queries go to subdomains of `steasteel.net`, with data encoded in the subdomain portion (e.g., `<encoded-data>.steasteel.net`). This is DNS tunneling for data exfiltration.\n\nConfirm with tshark:\n```bash\ntshark -r compromised.pcap -Y 'dns.qry.type == 1' -T fields -e dns.qry.name | sort | uniq -c | sort -rn | head -5\n```\n**Answer: `steasteel.net`**"
+        "description": "Identify the DNS tunneling domain used for exfiltration",
+        "command": "Statistics → Protocol Hierarchy, then tshark to extract domains",
+        "explanation": "Check Protocol Hierarchy — DNS accounts for ~76% of all packets, which is massively anomalous. Filter for `dns` and examine the queries: thousands of queries go to subdomains of a single root domain, with data encoded in the subdomain portion.\n\nConfirm with tshark:\n```bash\ntshark -r compromised.pcap -Y 'dns.qry.type == 1' -T fields -e dns.qry.name \\\n  | sort | uniq -c | sort -rn | head -5\n```\n\n**Answer:** `steasteel.net`"
       }
     ]
   },

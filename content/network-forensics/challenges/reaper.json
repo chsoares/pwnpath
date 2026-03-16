@@ -5,73 +5,96 @@
   "htbUrl": "https://app.hackthebox.com/sherlocks/Reaper",
   "difficulty": "very_easy",
   "estimatedTime": "1-2 hours",
-  "keyTakeaway": "NTLM relay attack detection — identifying LLMNR poisoning chains leading to relay attacks and lateral movement in Active Directory",
-  "tags": ["wireshark", "ntlm-relay", "llmnr", "active-directory", "smb", "lateral-movement"],
+  "keyTakeaway": "NTLM relay attack detection — correlating PCAP evidence with Windows Event Logs to identify hostname/IP mismatches from relay attacks",
+  "tags": ["wireshark", "ntlm-relay", "llmnr", "active-directory", "smb", "event-logs", "evtx", "nbns"],
   "fundamentals": {
-    "content": "## NTLM Relay Attacks\n\n### From LLMNR Poisoning to NTLM Relay\n\nIn the Noxious challenge, we saw LLMNR poisoning used to **capture** NTLMv2 hashes for offline cracking. NTLM relay takes this a step further: instead of cracking the hash, the attacker **relays the authentication in real-time** to another service, gaining immediate access.\n\n### How NTLM Relay Works\n\n1. Victim tries to access a resource → DNS fails → LLMNR broadcast\n2. Attacker (running Responder + ntlmrelayx) responds to LLMNR query\n3. Victim authenticates to attacker via NTLM\n4. Instead of capturing the hash, attacker **forwards** the auth to a target server\n5. Target server sees valid NTLM authentication → grants access\n6. Attacker gets authenticated session on the target without knowing the password\n\n### Key Difference: Capture vs Relay\n\n| Technique | Tool | Result | Requires Cracking? |\n|-----------|------|--------|--------------------|\n| LLMNR Poisoning (capture) | Responder | NTLMv2 hash | Yes |\n| NTLM Relay | ntlmrelayx | Authenticated session | No |\n\n### Detection in PCAPs\n\nLook for these indicators:\n- **LLMNR queries + unexpected responses** (same as poisoning)\n- **Workstation/IP mismatches** — a host claiming to be a workstation but with a different IP than expected\n- **Rapid NTLM auth to multiple targets** — relay chains show auth forwarded to services\n- **IPC$ share access** — `\\\\*\\IPC$` connections are often used for relay attacks\n- **Logon ID correlation** — track the same Logon ID across multiple SMB sessions\n\n### SMB Session Analysis\n\nIn SMB2, look for:\n- `Session Setup Request/Response` — contains NTLM auth blobs\n- `Tree Connect Request` — shows which share is being accessed\n- The `Account` and `Domain` fields reveal whose credentials are being relayed",
+    "content": "## NTLM Relay Attacks & Event Log Correlation\n\nIn Noxious, you saw LLMNR poisoning used to **capture** NTLMv2 hashes for offline cracking. NTLM relay is the next evolution: instead of cracking the hash, the attacker **relays the authentication in real-time** to another service, gaining immediate access without knowing the password.\n\n### How NTLM Relay Works\n\n1. Victim tries to access a resource → DNS fails → LLMNR broadcast\n2. Attacker (running Responder + ntlmrelayx) responds to LLMNR query\n3. Victim authenticates to attacker via NTLM\n4. Instead of capturing the hash, the attacker **forwards** the NTLM auth to a target server\n5. Target server sees valid authentication → grants access\n6. Attacker gets an authenticated session on the target without knowing the password\n\n### Key Difference: Capture vs Relay\n\n| Technique | Tool | Result | Requires Cracking? |\n|-----------|------|--------|--------------------|\n| LLMNR Poisoning (capture) | Responder | NTLMv2 hash | Yes |\n| NTLM Relay | ntlmrelayx | Authenticated session | No |\n\nRelay is more dangerous because it provides **immediate access** — no cracking time, no dependence on password complexity.\n\n### Detecting NTLM Relay: The Hostname/IP Mismatch\n\nThe signature detection for NTLM relay is a **workstation name / source IP mismatch** in logon events:\n\n- The relayed NTLM authentication carries the **victim's workstation name** (embedded in the NTLM message)\n- But the TCP connection comes from the **attacker's IP address**\n- So the logon event shows `WorkstationName: VICTIM-PC` but `IpAddress: ATTACKER-IP`\n\nThis mismatch is impossible during normal authentication and is a reliable relay indicator.\n\n### Windows Event Logs for Network Forensics\n\nThis challenge introduces a new evidence type: **Windows Event Logs** (`.evtx` files). Several questions require parsing event logs, not just the PCAP.\n\nKey Event IDs:\n\n| Event ID | Log | What It Shows |\n|----------|-----|---------------|\n| **4624** | Security | Successful logon — username, source IP, source port, workstation name, Logon ID |\n| **5140** | Security | Network share access — which share was accessed |\n\n### Parsing .evtx Files\n\nWindows Event Logs are in binary `.evtx` format. To analyze them on Linux:\n\n```bash\n# Convert to JSON for easy parsing\nevtx_dump Security.evtx > events.json\n\n# Find logon events\ncat events.json | jq 'select(.Event.System.EventID == 4624)'\n\n# Extract key fields from logon events\ncat events.json | jq 'select(.Event.System.EventID == 4624) | .Event.EventData'\n```\n\nAlternatively, open `.evtx` files directly in Windows Event Viewer, or use tools like `evtxecmd` or `chainsaw`.\n\n### NBNS for Hostname-to-IP Mapping\n\n**NetBIOS Name Service (NBNS)** packets in PCAPs reveal which IP belongs to which hostname. Hosts periodically broadcast NBNS registration/refresh packets announcing their name. Filter with `nbns` in Wireshark to build your IP-to-hostname map.\n\n### IPC$ Share in Relay Attacks\n\nWhen ntlmrelayx relays credentials, it typically accesses the `\\\\*\\IPC$` (Inter-Process Communication) share on the target. IPC$ is used for remote service management and doesn't require a specific share to exist. Event ID 5140 logs this access.",
     "toolReferences": [
       {
         "tool": "Wireshark",
         "commands": [
-          "Filter: llmnr (identify poisoning)",
-          "Filter: ntlmssp (trace NTLM auth flow)",
-          "Filter: smb2 (session setup and tree connects)",
-          "Filter: smb2.cmd == 1 (Session Setup messages)",
-          "Filter: smb2.tree (Tree Connect requests for share access)",
-          "Expand: SMB2 > Session Setup > Security Blob > NTLMSSP > NTLMSSP_AUTH",
-          "Statistics > Conversations > TCP (identify unusual connection pairs)"
+          "Filter: nbns — NetBIOS Name Service (hostname discovery)",
+          "Filter: llmnr — LLMNR queries and responses",
+          "Filter: ntlmssp — NTLM authentication messages",
+          "Filter: smb2 — SMB2 tree connects and session setup"
+        ]
+      },
+      {
+        "tool": "evtx_dump + jq",
+        "commands": [
+          "evtx_dump Security.evtx > events.json — convert EVTX to JSON",
+          "jq 'select(.Event.System.EventID == 4624)' events.json — filter logon events",
+          "jq '.Event.EventData' — extract event data fields"
         ]
       }
     ]
   },
   "hints": {
     "hints": [
-      "This builds on LLMNR poisoning (Noxious) but goes further — the attacker doesn't just capture the hash, they relay it. Look for the LLMNR poisoning as the starting point.",
-      "Look for workstation/IP mismatches in the NTLM authentication messages. If a host identifies as one workstation but has a different IP, that's suspicious.",
-      "The victim whose credentials are relayed is identified in the NTLMSSP_AUTH packets. Look at the username and domain fields.",
-      "Track the Logon ID from the SMB Session Setup — this hex value ties together all activity under that authentication session.",
-      "Look for IPC$ share access (`\\\\*\\IPC$`) — this is commonly used in relay attacks for remote service interaction.",
-      "The attacker's ultimate goal is lateral movement. Follow what happens after the relay succeeds — what shares are accessed?"
+      "You have two artifacts: a PCAP and a Windows Event Log (.evtx). Some questions need the PCAP, others need the event log. Start with the PCAP to map IPs to hostnames.",
+      "Filter `nbns` in Wireshark to see NetBIOS name registrations — this tells you which IP belongs to which workstation.",
+      "The PCAP shows the LLMNR poisoning (same pattern as Noxious), but the key detection evidence is in the Event Logs — look at Event ID 4624 for the hostname/IP mismatch.",
+      "In the 4624 logon event, compare `WorkstationName` (victim's hostname, carried in NTLM) with `IpAddress` (attacker's IP, source of TCP connection). This mismatch proves relay.",
+      "Event ID 5140 shows which share was accessed during the relay. Look for the share that ntlmrelayx uses for its relay operation.",
+      "For the victim's intended file share, go back to the PCAP — look at SMB2 Tree Connect requests from the victim to the domain controller shortly after the relay."
     ]
   },
   "solution": {
-    "content": "## Full Walkthrough\n\n**Scenario:** Forela's SOC detected suspicious NTLM authentication patterns on the internal network. Analysis reveals an LLMNR poisoning attack that escalated to NTLM relay, allowing the attacker to authenticate to resources without cracking credentials.\n\n**Key actors:**\n\n| Role | Details |\n|------|--------|\n| Victim user | `arthur.kyle` |\n| Logon ID | `0x64A799` |\n| Attack chain | LLMNR poisoning → NTLM relay → IPC$ access |",
+    "content": "## Full Walkthrough\n\n**Scenario:** Forela's SIEM detected a suspicious logon event where the workstation name and source IP address don't match — a hallmark of NTLM relay. You're given a network capture and Windows Security event logs to investigate.\n\n**Key learning:** This challenge combines PCAP and Event Log analysis. The PCAP shows the network-level attack (LLMNR poisoning → NTLM relay), while the Event Logs provide the detection evidence (hostname/IP mismatch in logon events). Real incident response always involves correlating multiple evidence sources.\n\n**Network layout:**\n\n| Role | IP Address | Hostname |\n|------|-----------|----------|\n| Target workstation | `172.17.79.129` | `Forela-Wkstn001` |\n| Victim workstation | `172.17.79.136` | `Forela-Wkstn002` |\n| Domain Controller | `172.17.79.4` | `DC01` |\n| Attacker | `172.17.79.135` | Unknown |",
     "steps": [
       {
         "stepNumber": 1,
-        "description": "Identify the LLMNR poisoning as the attack entry point",
-        "command": "Wireshark filter: llmnr",
-        "explanation": "Filter for LLMNR traffic to find the initial poisoning. Just like in Noxious, you'll see a host broadcasting LLMNR queries and an unexpected host responding. This is the attacker running Responder, but this time they're also running ntlmrelayx to relay (not just capture) the authentication."
+        "description": "Map IP addresses to hostnames using NBNS",
+        "command": "Wireshark filter: nbns",
+        "explanation": "Filter for NBNS (NetBIOS Name Service) traffic. Workstations periodically broadcast their names. You'll see registration/refresh packets:\n- `172.17.79.129` → `FORELA-WKSTN001`\n- `172.17.79.136` → `FORELA-WKSTN002`\n\n**Answer (Wkstn001 IP):** `172.17.79.129`\n\n**Answer (Wkstn002 IP):** `172.17.79.136`"
       },
       {
         "stepNumber": 2,
-        "description": "Detect the workstation/IP mismatch",
-        "command": "Wireshark filter: ntlmssp",
-        "explanation": "Examine the NTLMSSP messages. Look at the workstation name in the NTLM auth versus the IP address it comes from. A mismatch — where the claimed workstation name doesn't match the expected IP for that host — is a strong indicator of relay. The attacker's machine is forwarding auth messages that claim to be from the victim's workstation."
+        "description": "Identify the compromised user account from the event logs",
+        "command": "evtx_dump Security.evtx | jq 'select(.Event.System.EventID == 4624)'",
+        "explanation": "Parse the Windows Security event log and filter for Event ID 4624 (successful logon). Look for logon events where the `IpAddress` doesn't match the expected IP for the `WorkstationName`. The username in the relayed authentication is `arthur.kyle`.\n\n**Answer:** `Arthur Kyle`"
       },
       {
         "stepNumber": 3,
-        "description": "Identify the relayed credentials",
-        "command": "Expand NTLMSSP_AUTH: User name and Domain name fields",
-        "explanation": "In the NTLMSSP_AUTH packets, expand the NTLMSSP layer to find the relayed credentials. The username is `arthur.kyle` — this user's authentication is being relayed by the attacker to access resources they shouldn't have access to. **Answer: `arthur.kyle`**"
+        "description": "Find the attacker's IP address",
+        "command": "Wireshark filter: llmnr",
+        "explanation": "In the PCAP, filter for LLMNR traffic. The victim on `172.17.79.136` sends an LLMNR query for a mistyped hostname. The host `172.17.79.135` responds — this is the attacker running Responder. This IP also appears in the Event Log as the `IpAddress` in the mismatch detection.\n\n**Answer:** `172.17.79.135`"
       },
       {
         "stepNumber": 4,
-        "description": "Extract the Logon ID for session tracking",
-        "command": "SMB2 Session Setup Response > Logon ID",
-        "explanation": "The Logon ID is a hex identifier that ties together all activity under one authenticated session. Find it in the SMB2 Session Setup Response packet. The value is `0x64A799`. This ID lets you track all actions the attacker performed using the relayed credentials. **Answer: `0x64A799`**"
+        "description": "Find the file share the victim was trying to access",
+        "command": "Wireshark filter: smb2 — look for Tree Connect Request from victim to DC01",
+        "explanation": "About 15 seconds after the relay attack, the victim (`172.17.79.136`) successfully connects to the domain controller (`172.17.79.4`). Filter for SMB2 traffic and look for Tree Connect Request packets. The victim's intended destination was the share on DC01.\n\n**Answer:** `\\\\DC01\\Trip`"
       },
       {
         "stepNumber": 5,
-        "description": "Find the share accessed via relay",
-        "command": "Wireshark filter: smb2.tree",
-        "explanation": "Filter for SMB2 Tree Connect requests to see what shares the attacker accessed using the relayed credentials. Look for `\\\\*\\IPC$` access — the IPC$ (Inter-Process Communication) share is used for remote service management and is a common relay target for lateral movement techniques. **Answer: `\\\\*\\IPC$`**"
+        "description": "Find the source port of the malicious logon",
+        "command": "Event ID 4624 → Network Information → Source Port",
+        "explanation": "In the Event ID 4624 logon event for the relayed session, expand the Network Information section. The `IpPort` field shows the ephemeral source port used by the attacker's relay connection.\n\n**Answer:** `40252`"
       },
       {
         "stepNumber": 6,
-        "description": "Reconstruct the full relay attack chain",
-        "command": "Correlate LLMNR → NTLM → SMB timeline",
-        "explanation": "The complete attack: (1) Attacker poisons LLMNR responses → (2) Victim authenticates to attacker via NTLM → (3) Instead of capturing the hash, attacker relays the NTLM auth to a target server → (4) Server accepts the relayed auth for `arthur.kyle` (Logon ID `0x64A799`) → (5) Attacker accesses `\\\\*\\IPC$` share for lateral movement. The key learning: NTLM relay is more dangerous than hash capture because it requires no cracking and provides immediate access."
+        "description": "Extract the Logon ID for the malicious session",
+        "command": "Event ID 4624 → New Logon → Logon ID",
+        "explanation": "In the same Event ID 4624 entry, the `TargetLogonId` field under \"New Logon\" shows the session identifier. This hex value ties together all activity performed under the relayed authentication.\n\n**Answer:** `0x64A799`"
+      },
+      {
+        "stepNumber": 7,
+        "description": "Document the hostname/IP mismatch that triggered detection",
+        "command": "Event ID 4624 → compare WorkstationName and IpAddress fields",
+        "explanation": "The SIEM alert was based on a mismatch between `WorkstationName` and `IpAddress` in the 4624 event:\n- `WorkstationName: FORELA-WKSTN002` — the victim's machine name, embedded in the relayed NTLM message\n- `IpAddress: 172.17.79.135` — the attacker's IP, the actual source of the TCP connection\n\nDuring normal authentication, the workstation name and source IP would match. This mismatch is only possible when someone relays the NTLM authentication through a different machine.\n\n**Answer:** `FORELA-WKSTN002, 172.17.79.135`"
+      },
+      {
+        "stepNumber": 8,
+        "description": "Determine when the malicious logon occurred",
+        "command": "Event ID 4624 → TimeCreated SystemTime",
+        "explanation": "The `TimeCreated SystemTime` field in the 4624 event shows when the relayed logon was recorded. Make sure to convert to UTC if the log shows a different timezone.\n\n**Answer:** `2024-07-31 04:55:16`"
+      },
+      {
+        "stepNumber": 9,
+        "description": "Find the share accessed by the attacker's relay tool",
+        "command": "Event ID 5140 at the same timestamp as the relay logon",
+        "explanation": "Event ID 5140 logs network share access. At the same timestamp as the relay logon, you'll see an access to the IPC$ share. The `\\\\*\\IPC$` share is used by ntlmrelayx during the relay process for remote service interaction — it's a standard part of the NTLM relay toolkit.\n\n**Answer:** `\\\\*\\IPC$`"
       }
     ]
   },

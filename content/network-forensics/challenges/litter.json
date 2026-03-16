@@ -5,96 +5,95 @@
   "htbUrl": "https://app.hackthebox.com/sherlocks/Litter",
   "difficulty": "easy",
   "estimatedTime": "2-3 hours",
-  "keyTakeaway": "DNS tunneling forensics — detecting dnscat2 C2 channels and decoding exfiltrated data from DNS queries",
-  "tags": ["wireshark", "dns-tunneling", "dnscat2", "c2", "exfiltration", "tshark"],
+  "keyTakeaway": "DNS tunneling forensics — detecting dnscat2 C2 channels by analyzing protocol hierarchy, decoding hex-encoded DNS queries, and reconstructing exfiltrated data",
+  "tags": ["wireshark", "dns-tunneling", "dnscat2", "c2", "exfiltration", "tshark", "cyberchef", "protocol-hierarchy"],
   "fundamentals": {
-    "content": "## DNS Tunneling\n\n### Why DNS?\n\nDNS (port 53) is almost never blocked by firewalls — every network needs name resolution. Attackers exploit this by encoding data inside DNS queries and responses, creating a covert communication channel that bypasses most security controls.\n\n### How DNS Tunneling Works\n\n1. The attacker controls a domain (e.g., `evil.com`) and its authoritative DNS server\n2. The compromised host encodes data as subdomains: `<encoded-data>.evil.com`\n3. The DNS query travels through the corporate DNS infrastructure to the attacker's DNS server\n4. The attacker's server decodes the data from the subdomain and sends commands back in DNS responses\n5. From the network's perspective, it looks like normal DNS resolution\n\n### dnscat2 — A Common DNS Tunneling Tool\n\n**dnscat2** is an open-source tool that creates an encrypted C2 channel over DNS. Key characteristics:\n- Queries contain hex-encoded data as subdomains\n- Uses the string `dnscat` as a prefix in initial handshake\n- Each DNS query's subdomain has 9 bytes of protocol overhead before the actual data\n- Version string is visible in the client binary filename\n\n### Detection Indicators\n\n| Indicator | Normal DNS | DNS Tunneling |\n|-----------|-----------|---------------|\n| Query volume | Hundreds/day | Thousands-millions |\n| Subdomain length | Short (www, mail) | Very long (hex-encoded) |\n| Unique FQDNs | Low diversity | Massive diversity under one domain |\n| TXT records | Rare | Frequent (larger payload capacity) |\n\n### Analysis Approach\n\n1. Check `Statistics > Protocol Hierarchy` — DNS dominating traffic volume is a red flag\n2. Extract unique queried domains with tshark\n3. Look for a single root domain with thousands of unique subdomains\n4. Decode the hex-encoded subdomain data to recover C2 commands and exfiltrated content",
+    "content": "## DNS Tunneling Detection & Analysis\n\nDNS tunneling is one of the most effective covert communication techniques — it abuses the DNS protocol to smuggle data in and out of a network. This challenge teaches you to detect it, decode the traffic, and reconstruct the attacker's entire session.\n\n### Why DNS?\n\nDNS (port 53) is almost never blocked by firewalls — every network needs name resolution. Attackers exploit this by encoding data inside DNS queries and responses, creating a covert channel that bypasses most security controls.\n\n### How DNS Tunneling Works\n\n1. The attacker controls a domain (e.g., `evil.com`) and its authoritative DNS server\n2. The compromised host encodes data as subdomains: `<hex-encoded-data>.evil.com`\n3. The DNS query travels through the corporate DNS infrastructure to the attacker's DNS server\n4. The attacker's server decodes the data and sends commands back in DNS responses\n5. From the network's perspective, it looks like normal DNS resolution\n\n### dnscat2 — A Common DNS Tunneling Tool\n\n**dnscat2** is an open-source tool that creates an encrypted C2 channel over DNS. Key characteristics in PCAPs:\n- Queries contain **hex-encoded data** as subdomains\n- Uses the string `dnscat` as a prefix in the initial handshake\n- Each DNS query has protocol overhead before the actual payload data\n- Generates a **massive number** of DNS queries to a single root domain\n\n### Detection: Protocol Hierarchy Analysis\n\n`Statistics → Protocol Hierarchy` in Wireshark shows the percentage of each protocol in the capture. This is often the fastest way to spot DNS tunneling:\n\n| Indicator | Normal DNS | DNS Tunneling |\n|-----------|-----------|---------------|\n| Packet % | Small fraction | Dominant (50%+) |\n| Subdomain length | Short (www, mail) | Very long (hex strings) |\n| Unique FQDNs | Low diversity | Thousands under one domain |\n| TXT records | Rare | Frequent (larger payload capacity) |\n\n### Decoding dnscat2 Traffic\n\nTo reconstruct the attacker's session from DNS queries:\n\n**Method 1 — Automated (dnscat_decoder.py):**\n```bash\npython3 dnscat_decoder.py suspicious_traffic.pcap \"tunneling-domain.com\" > decoded.txt\n```\n\n**Method 2 — Manual (tshark + CyberChef):**\n```bash\n# Extract DNS query names\ntshark -r capture.pcap -Y 'dns' -T fields -e dns.qry.name > queries.txt\n```\nThen in CyberChef: strip the domain suffix and dots, apply `From Hex` to decode.\n\n### What to Look For in Decoded Output\n\nOnce decoded, dnscat2 traffic reveals the attacker's full shell session:\n- Commands: `whoami`, `dir`, `cd`, `type`, `ren`\n- File listings showing what the attacker found\n- File contents (if the attacker used `type` or `cat` to dump them)\n- Anti-forensics (renaming tools, deleting logs)",
     "toolReferences": [
       {
         "tool": "Wireshark",
         "commands": [
-          "Statistics > Protocol Hierarchy",
-          "Filter: dns",
-          "Filter: dns.qry.name contains \"<domain>\"",
-          "Statistics > Conversations > UDP tab"
+          "Statistics → Protocol Hierarchy — identify anomalous DNS volume",
+          "Statistics → Conversations → UDP — find top DNS talkers",
+          "Statistics → Endpoints → IPv4 — find suspect host by packet count",
+          "Filter: dns — show all DNS traffic"
         ]
       },
       {
         "tool": "tshark",
         "commands": [
-          "tshark -r capture.pcap -Y 'dns' -T fields -e dns.qry.name | sort -u",
-          "tshark -r capture.pcap -Y 'dns and ip.dst == <suspect_ip>' -T fields -e dns.qry.name"
+          "tshark -r capture.pcap -Y 'dns' -T fields -e dns.qry.name | sort -u — extract unique queries"
+        ]
+      },
+      {
+        "tool": "CyberChef / dnscat_decoder.py",
+        "commands": [
+          "From Hex recipe in CyberChef to decode DNS subdomain data",
+          "python3 dnscat_decoder.py file.pcap 'domain.com' — automated decoding"
         ]
       }
     ]
   },
   "hints": {
     "hints": [
-      "Start with `Statistics > Protocol Hierarchy` — one protocol will massively dominate the traffic. That's your answer to Task 1.",
-      "Use `Statistics > Endpoints > IPv4` sorted by packet count to find the suspect host.",
-      "To decode dnscat2 traffic, you need to extract DNS query names, strip the domain suffix (`.microsofto365.com`), remove dots, and decode from hex. The first 9 bytes of each chunk are dnscat2 protocol overhead.",
-      "There's a Python tool called `DNScat-Decoder` on GitHub that automates the decoding — or you can use tshark + CyberChef.",
-      "Once decoded, you'll see the attacker's full command history — `whoami`, directory listings, file reads, and the exfiltrated CSV.",
-      "The attacker renames the dnscat2 binary to hide it. Look for a `ren` (rename) command in the decoded output.",
-      "Count the CSV records carefully — they start from index 0, so the last index + 1 = total records."
+      "Start with `Statistics → Protocol Hierarchy` — one protocol will massively dominate the traffic. That immediately answers the first question.",
+      "Use `Statistics → Endpoints → IPv4` sorted by packet count to find the suspect host with the most DNS communication.",
+      "To read the attacker's commands, you need to decode the hex-encoded DNS query subdomains. Use dnscat_decoder.py or tshark + CyberChef.",
+      "In the decoded output, look for `dir` commands on the Downloads folder — the dnscat2 binary filename reveals its version.",
+      "The attacker renames the tool to hide it. Look for a `ren` command in the decoded session.",
+      "The exfiltrated CSV was dumped through the DNS tunnel using `type`. Count the data rows carefully — they're indexed starting from 0."
     ]
   },
   "solution": {
-    "content": "## Full Walkthrough\n\n**Scenario:** Khalid logged onto a testing host that was compromised. Company information has been stolen. You're given `suspicious_traffic.pcap` containing DNS tunneling via dnscat2.\n\n**Key infrastructure:**\n\n| Role | IP Address |\n|------|----------|\n| Compromised Host | Victim IP (internal) |\n| C2 Server | `192.168.157.145` |\n| Tunneling Domain | `microsofto365.com` (note the typo — \"microsofto\", not \"microsoft\") |",
+    "content": "## Full Walkthrough\n\n**Scenario:** A testing host (used as a \"dumping ground\" outside the corporate network) was compromised. Sensitive PII data that shouldn't have been stored there was exfiltrated via DNS tunneling. You're given the PCAP to investigate.\n\n**Key learning:** This challenge teaches DNS tunneling detection from scratch — how to spot it in protocol statistics, identify the tunneling domain, decode the traffic, and reconstruct the attacker's entire session to determine exactly what was stolen.\n\n**Key infrastructure:**\n\n| Role | IP Address |\n|------|----------|\n| Compromised Host | Victim (internal) |\n| C2 Server | `192.168.157.145` |\n| Tunneling Domain | `microsofto365.com` (note the typo — \"microsofto\", not \"microsoft\") |",
     "steps": [
       {
         "stepNumber": 1,
         "description": "Identify the suspicious protocol",
-        "command": "Wireshark: Statistics > Protocol Hierarchy",
-        "explanation": "Open the Protocol Hierarchy — DNS dominates the traffic with an abnormally high number of packets. Normal networks have DNS as a small fraction of traffic; here it's the majority. This is a classic indicator of DNS tunneling. **Answer: `DNS`**"
+        "command": "Wireshark: Statistics → Protocol Hierarchy",
+        "explanation": "Open the Protocol Hierarchy. DNS dominates the traffic with an abnormally high number of packets — in normal network traffic, DNS is a small fraction. This massive DNS volume is the classic first indicator of DNS tunneling.\n\n**Answer:** `DNS`"
       },
       {
         "stepNumber": 2,
-        "description": "Find the suspect host IP",
-        "command": "Wireshark: Statistics > Endpoints > IPv4 tab, sort by Packets",
-        "explanation": "Sort endpoints by packet count. The IP `192.168.157.145` has the most DNS communication. This is the attacker's DNS server receiving the tunneled data. **Answer: `192.168.157.145`**"
+        "description": "Find the suspect host IP address",
+        "command": "Wireshark: Statistics → Endpoints → IPv4 tab, sort by Packets",
+        "explanation": "Sort endpoints by packet count. The IP with the most DNS communication is `192.168.157.145` — this is the attacker's DNS server receiving all the tunneled data.\n\n**Answer:** `192.168.157.145`"
       },
       {
         "stepNumber": 3,
-        "description": "Decode the dnscat2 traffic to reveal commands",
+        "description": "Decode the tunnel and find the first command",
         "command": "python3 dnscat_decoder.py suspicious_traffic.pcap \"microsofto365.com\" > decoded.txt",
-        "explanation": "Use the DNScat-Decoder tool (github.com/josemlwdf/DNScat-Decoder) to decode all tunneled traffic. This extracts DNS query subdomains, strips the domain suffix and dots, decodes hex to ASCII, and removes 9 bytes of dnscat2 protocol overhead per chunk.\n\n**Alternative manual approach:**\n```bash\n# Extract DNS queries\ntshark -r suspicious_traffic.pcap -Y \"dns and ip.dst == 192.168.157.145\" -T fields -e dns.qry.name > queries.txt\n# Strip domain and dots\nsed 's/.microsofto365.com//g' queries.txt | sed 's/\\.//g' > hex_data.txt\n# Decode hex in CyberChef (From Hex, skip first 9 bytes per chunk)\n```\n\nThe decoded output reveals the attacker's full session."
+        "explanation": "Decode the DNS tunnel traffic. You can use the dnscat_decoder.py tool (available on GitHub), or manually extract queries with tshark and decode the hex in CyberChef.\n\nThe decoded output reveals the attacker's full session. The first command after the dnscat2 session is established is standard reconnaissance.\n\n**Answer:** `whoami`"
       },
       {
         "stepNumber": 4,
-        "description": "Answer Task 3 — first command executed",
-        "command": "Read the decoded output — first command after session establishment",
-        "explanation": "The first command the attacker sends after establishing the dnscat2 session is `whoami` — standard initial reconnaissance to confirm access and privilege level. **Answer: `whoami`**"
+        "description": "Find the dnscat2 version",
+        "command": "Read decoded output — look for directory listing of Downloads folder",
+        "explanation": "In the decoded session, the attacker runs `dir C:\\Users\\test\\Downloads\\` which reveals the file `dnscat2-v0.07-client-win32.exe`. The version is embedded in the filename.\n\n**Answer:** `0.07`"
       },
       {
         "stepNumber": 5,
-        "description": "Answer Task 4 — dnscat2 version",
-        "command": "Look for 'dnscat2' string in decoded output or directory listings",
-        "explanation": "The attacker runs `dir C:\\Users\\test\\Downloads\\` which reveals the file `dnscat2-v0.07-client-win32.exe` in the victim's Downloads folder. The version is embedded in the filename. **Answer: `0.07`**"
+        "description": "Find what the attacker renamed the tool to",
+        "command": "Search decoded output for 'ren' command",
+        "explanation": "The attacker attempts to hide the dnscat2 binary by renaming it to look like a legitimate Windows installer:\n```\nren dnscat2-v0.07-client-win32.exe win_installer.exe\n```\n\n**Answer:** `win_installer.exe`"
       },
       {
         "stepNumber": 6,
-        "description": "Answer Task 5 — tool rename for anti-forensics",
-        "command": "Search decoded output for 'ren' command",
-        "explanation": "The attacker attempts to hide the dnscat2 binary by renaming it:\n```\nren dnscat2-v0.07-client-win32.exe win_installer.exe\n```\nThis makes the binary look like a legitimate Windows installer. **Answer: `win_installer.exe`**"
+        "description": "Count files in the user's cloud storage",
+        "command": "Search decoded output for OneDrive directory listing",
+        "explanation": "The attacker runs `dir C:\\Users\\test\\OneDrive\\` to check the user's cloud storage. The output shows 2 directories but zero files.\n\n**Answer:** `0`"
       },
       {
         "stepNumber": 7,
-        "description": "Answer Task 6 — cloud storage enumeration",
-        "command": "Search decoded output for 'OneDrive' or cloud storage references",
-        "explanation": "The attacker runs `dir C:\\Users\\test\\OneDrive\\` to check the user's cloud storage. The output shows 2 directories but **0 files**. **Answer: `0`**"
+        "description": "Find the full path of the stolen PII file",
+        "command": "Search decoded output for file navigation through Documents folder",
+        "explanation": "The attacker navigates through the Documents folder:\n```\ncd C:\\Users\\test\\Documents\\\ndir\ncd \"client data optimisation\"\ndir\n```\nThis reveals `user details.csv` inside the `client data optimisation` folder.\n\n**Answer:** `C:\\users\\test\\documents\\client data optimisation\\user details.csv`"
       },
       {
         "stepNumber": 8,
-        "description": "Answer Task 7 — location of stolen PII file",
-        "command": "Search decoded output for file navigation through Documents folder",
-        "explanation": "The attacker navigates:\n```\ncd C:\\Users\\test\\Documents\\\ndir\ncd \"client data optimisation\"\ndir\n```\nDiscovering `user details.csv` inside the `client data optimisation` folder. **Answer: `C:\\users\\test\\documents\\client data optimisation\\user details.csv`**"
-      },
-      {
-        "stepNumber": 9,
-        "description": "Answer Task 8 — count of stolen PII records",
-        "command": "Search decoded output for the CSV data (look for 'type \"user details.csv\"')",
-        "explanation": "The attacker dumps the CSV through the tunnel with `type \"user details.csv\"`. The CSV contains customer records numbered starting from index 0. The last record index is 720, meaning **721 total records** (0 through 720 inclusive). Count the data rows (excluding the header) in the decoded CSV. **Answer: `721`**"
+        "description": "Count the stolen PII records",
+        "command": "Search decoded output for the CSV dump (type command)",
+        "explanation": "The attacker dumps the CSV through the tunnel with `type \"user details.csv\"`. The decoded output shows the CSV contents — customer records indexed starting from 0. The last record index is 720, meaning 721 total records (indices 0 through 720 inclusive). Count carefully — don't include the CSV header row.\n\n**Answer:** `721`"
       }
     ]
   },
