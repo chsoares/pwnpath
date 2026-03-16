@@ -5,65 +5,90 @@
   "htbUrl": "https://app.hackthebox.com/sherlocks/Telly",
   "difficulty": "very_easy",
   "estimatedTime": "1 hour",
-  "keyTakeaway": "Telnet plaintext exploitation — analyzing unencrypted remote access sessions and understanding legacy protocol risks",
-  "tags": ["wireshark", "telnet", "plaintext", "persistence", "cve-2026-24061"],
+  "keyTakeaway": "Telnet plaintext session analysis — reading attacker commands in plaintext, identifying authentication bypass (CVE-2026-24061), and tracing post-exploitation activity",
+  "tags": ["wireshark", "telnet", "plaintext", "follow-tcp-stream", "cve-2026-24061", "persistence", "exfiltration", "sqlite"],
   "fundamentals": {
-    "content": "## Telnet Analysis & Legacy Protocol Risks\n\n### Why Telnet Is Dangerous\n\n**Telnet** (TCP port 23) is a legacy remote access protocol that transmits **everything in plaintext** — including usernames, passwords, and all commands typed during the session. Unlike SSH, there is zero encryption.\n\nThis means anyone capturing network traffic can:\n- Read login credentials directly\n- See every command the attacker executes\n- Reconstruct the entire session keystroke-by-keystroke\n\n### Telnet in Wireshark\n\nTelnet data is transmitted character-by-character (each keystroke is a separate packet), which makes it look fragmented. The best way to read a Telnet session is:\n\n1. Filter for `telnet` traffic\n2. Right-click a packet → **Follow > TCP Stream**\n3. The stream shows the full session in readable text\n\n| What to Look For | Where |\n|-----------------|-------|\n| Login credentials | Early in the TCP stream (login: / Password:) |\n| Commands executed | Full stream content |\n| Files accessed | `cat`, `less`, `vi` commands in stream |\n| Persistence | User creation, cron jobs, downloaded scripts |\n\n### CVE-2026-24061 — GNU InetUtils Telnet Auth Bypass\n\nThis vulnerability in GNU InetUtils telnetd allows authentication bypass, enabling attackers to gain access without valid credentials. When you see successful Telnet connections that bypass normal authentication flow, this CVE may be in play.\n\n### Post-Exploitation via Telnet\n\nOnce attackers gain Telnet access, common actions include:\n- Creating backdoor user accounts\n- Downloading persistence scripts (via `wget`, `curl`)\n- Exfiltrating sensitive files (databases, configs)\n- Setting up reverse shells for more reliable access",
+    "content": "## Telnet Analysis & Plaintext Protocol Risks\n\nIn the previous lesson you analyzed FTP, which transmits credentials in plaintext. Telnet goes even further — it transmits **the entire interactive session** in plaintext, including every command typed and every output received. This makes Telnet traffic a forensic goldmine: you can literally read the attacker's shell session keystroke by keystroke.\n\n### What Is Telnet?\n\n**Telnet** (TCP port 23) is a legacy remote access protocol from the 1960s. It provides an interactive shell session over the network with **zero encryption**. Unlike SSH (its modern replacement), Telnet sends everything — usernames, passwords, commands, and output — as readable ASCII text.\n\nThis means anyone who captures the network traffic can:\n- Read login credentials directly\n- See every command the attacker executes\n- Read every file the attacker accesses\n- Reconstruct the entire session from start to finish\n\n### Reading Telnet Sessions in Wireshark\n\nTelnet data is transmitted character-by-character (each keystroke is a separate packet), which makes individual packets look fragmented and hard to read. The correct approach is **Follow TCP Stream**:\n\n1. Filter for `telnet` (or `tcp.port == 23`)\n2. Right-click any Telnet packet → **Follow → TCP Stream**\n3. The stream view shows the full session as readable text\n\nIn the stream view, the two sides of the conversation are shown in different colors:\n- **Client (red/pink)** — what the attacker typed\n- **Server (blue)** — what the server responded\n\n### CVE-2026-24061: GNU InetUtils Telnet Authentication Bypass\n\nThis critical vulnerability (CVSS 9.8) in GNU InetUtils telnetd (versions 1.9.3 through 2.7) allows **complete authentication bypass**, granting root access without any credentials.\n\n**How it works:**\n\nThe Telnet protocol includes an option called `NEW_ENVIRON` that lets the client send environment variables to the server before login. The `telnetd` daemon passes these variables to the `login` program. The vulnerability: telnetd does **not sanitize** the `USER` variable before passing it to `login`.\n\nAn attacker sets:\n```\nUSER = -f root\n```\n\nThe daemon constructs the command:\n```\n/usr/bin/login -h [hostname] \"-f root\"\n```\n\nThe `-f` flag tells `login` to **skip authentication entirely** and log in as the specified user (root). The attacker gets a root shell without ever entering a password.\n\n### Recognizing Post-Exploitation in Telnet Sessions\n\nOnce you can read the attacker's session, look for these common post-exploitation actions:\n\n| Action | Commands to Watch For |\n|--------|----------------------|\n| **Reconnaissance** | `whoami`, `id`, `hostname`, `uname -a`, `cat /etc/passwd` |\n| **Persistence — user creation** | `useradd`, `adduser`, `passwd`, `usermod -aG sudo` |\n| **Persistence — scripts** | `wget`/`curl` downloading `.sh` scripts, `chmod +x`, execution |\n| **Defense evasion** | Checking/disabling security tools (IDS, Tripwire, auditd) |\n| **Data exfiltration** | `python3 -m http.server`, `scp`, `nc`, `curl -X POST` |\n\n### Extracting Exfiltrated Files\n\nAttackers often use Python's built-in HTTP server (`python3 -m http.server`) to serve files from the compromised host. When this happens, the file transfer appears as HTTP traffic in the PCAP. You can extract these files with:\n\n`File → Export Objects → HTTP → Save All`\n\nIf the exfiltrated file is a database (e.g., `.db`), you can open it locally with `sqlite3` to examine its contents and count records.",
     "toolReferences": [
       {
         "tool": "Wireshark",
         "commands": [
-          "Filter: telnet",
-          "Filter: tcp.port == 23",
-          "Right-click > Follow > TCP Stream (to read full session)",
-          "Filter: ftp || http (look for file downloads after initial access)",
-          "Filter: tcp.flags.syn == 1 && tcp.flags.ack == 0 (new connections)"
+          "Filter: telnet — show Telnet control traffic",
+          "Filter: tcp.port == 23 — alternative Telnet filter",
+          "Right-click → Follow → TCP Stream — read full session",
+          "File → Export Objects → HTTP — extract files served via Python HTTP server",
+          "View → Time Display Format → UTC Date and Time of Day — correct timestamps"
+        ]
+      },
+      {
+        "tool": "sqlite3",
+        "commands": [
+          "sqlite3 file.db — open a SQLite database",
+          ".tables — list all tables",
+          "SELECT COUNT(*) FROM tablename; — count records"
         ]
       }
     ]
   },
   "hints": {
     "hints": [
-      "Start by filtering `telnet` traffic and following the TCP stream — since Telnet is plaintext, you can read the entire session directly.",
-      "Look for the login prompt in the stream — the credentials are transmitted in cleartext.",
-      "After initial access, the attacker creates a backdoor user. Look for `useradd` or `adduser` commands in the session.",
-      "The attacker downloads a persistence script — look for `wget` or `curl` commands and note the filename.",
-      "For the exfiltrated database, look for commands that access or transfer database files (`.db` extension).",
-      "The vulnerability exploited is a recent CVE in the Telnet daemon — check the server banner or authentication flow for signs of GNU InetUtils."
+      "This challenge is almost entirely about reading a plaintext Telnet session. Filter for `telnet` and follow the TCP stream — you can read the entire attack from start to finish.",
+      "The server hostname is visible in the Telnet session banner or prompt. Look at what appears after the attacker connects.",
+      "The authentication bypass is a recent critical CVE in GNU InetUtils telnetd. The mechanism involves the `USER` environment variable and the `-f` flag to `/usr/bin/login`.",
+      "After gaining access, the attacker creates a backdoor user and downloads a persistence script. Read the commands in the stream — `useradd`/`adduser` for the user, `wget`/`curl` for the script.",
+      "The attacker exfiltrates a `.db` file using a Python HTTP server. Use `File → Export Objects → HTTP` to extract it, then open with `sqlite3` to count the records inside."
     ]
   },
   "solution": {
-    "content": "## Full Walkthrough\n\n**Scenario:** A plaintext Telnet service was exploited on a Forela server. The attacker leveraged a vulnerability in GNU InetUtils telnetd to bypass authentication, establish persistence, and exfiltrate sensitive data. Analyze the PCAP to reconstruct the attack.\n\n**Key findings:**\n\n| Element | Detail |\n|---------|--------|\n| Vulnerability | CVE-2026-24061 (GNU InetUtils auth bypass) |\n| Backdoor user | `cleanupsvc` |\n| Backdoor password | `YouKnowWhoiam69` |\n| Persistence script | `linper.sh` |\n| Exfiltrated file | `credit-cards-25-blackfriday.db` |",
+    "content": "## Full Walkthrough\n\n**Scenario:** A Forela backup server running GNU InetUtils telnetd was compromised. The attacker exploited an authentication bypass vulnerability to gain root access, established persistence, and exfiltrated a database containing sensitive data. Since Telnet is plaintext, the entire attack is visible in the PCAP.\n\n**Key learning:** Because Telnet transmits everything in cleartext, this challenge is an exercise in reading an attacker's session. Unlike FTP (where you filter for specific commands), here you follow the TCP stream and literally read the attacker's terminal — every command they typed and every output they received.",
     "steps": [
       {
         "stepNumber": 1,
-        "description": "Identify the Telnet vulnerability",
-        "command": "Wireshark filter: telnet → Follow TCP Stream",
-        "explanation": "Filter for Telnet traffic and follow the TCP stream. Examine the server banner and authentication flow. The telnetd service is GNU InetUtils, vulnerable to CVE-2026-24061 — an authentication bypass that allows the attacker to gain shell access without valid credentials. **Answer: CVE-2026-24061**"
+        "description": "Open the Telnet session and identify the server hostname",
+        "command": "Wireshark filter: telnet → right-click → Follow → TCP Stream",
+        "explanation": "Filter for `telnet` traffic and follow the TCP stream. The session opens with the server's login banner or hostname prompt. The server identifies itself in the session.\n\n**Answer:** `backup-secondary`"
       },
       {
         "stepNumber": 2,
-        "description": "Read the attacker's session to find the backdoor account",
-        "command": "Follow TCP Stream on the Telnet session",
-        "explanation": "Reading through the plaintext Telnet session, look for user creation commands. The attacker runs a command to create a new user `cleanupsvc` with password `YouKnowWhoiam69`. This is a backdoor account disguised as a cleanup service to avoid suspicion. **Answer: `cleanupsvc:YouKnowWhoiam69`**"
+        "description": "Identify the vulnerability used for authentication bypass",
+        "command": "Examine the Telnet NEW_ENVIRON options and login flow in the stream",
+        "explanation": "Look at the authentication flow in the Telnet session. The attacker exploits CVE-2026-24061 — a critical vulnerability in GNU InetUtils telnetd that allows authentication bypass by injecting `-f root` via the `USER` environment variable. The `-f` flag tells the `login` program to skip password verification entirely, granting immediate root access.\n\n**Answer:** `CVE-2026-24061`"
       },
       {
         "stepNumber": 3,
-        "description": "Identify the persistence mechanism",
-        "command": "Look for wget/curl commands in the Telnet stream",
-        "explanation": "In the Telnet session, the attacker downloads a persistence script using `wget` or `curl`. The script is named `linper.sh` (likely short for 'Linux persistence'). This script sets up mechanisms to maintain access even after reboots — common techniques include cron jobs, systemd services, or SSH key installation. **Answer: `linper.sh`**"
+        "description": "Find the backdoor user account created for persistence",
+        "command": "Read the Telnet TCP stream — look for user creation commands",
+        "explanation": "Reading through the attacker's session, look for `useradd` or `adduser` commands. The attacker creates a backdoor account with a name designed to blend in as a legitimate service account, along with its password.\n\n**Answer:** `cleanupsvc:YouKnowWhoiam69`"
       },
       {
         "stepNumber": 4,
-        "description": "Find the exfiltrated database",
-        "command": "Search for file access commands in the session",
-        "explanation": "The attacker accesses and exfiltrates a database file: `credit-cards-25-blackfriday.db`. This is clearly a high-value target containing payment card information. The attacker likely used the Telnet session or a secondary channel to transfer this file out. **Answer: `credit-cards-25-blackfriday.db`**"
+        "description": "Determine the timestamp of the backdoor user creation",
+        "command": "Click the Telnet packet corresponding to the useradd command → check Frame → Arrival Time (UTC)",
+        "explanation": "Find the packet where the user creation command is sent. Click on it and expand the `Frame` section in the packet details. The `Arrival Time` field gives the precise UTC timestamp.\n\nMake sure your time display is set to UTC: `View → Time Display Format → UTC Date and Time of Day`.\n\n**Answer:** `2026-01-27 10:39:28`"
       },
       {
         "stepNumber": 5,
-        "description": "Reconstruct the full attack chain",
-        "command": "Correlate timeline across all streams",
-        "explanation": "The complete attack: (1) Attacker connects to Telnet service → (2) Exploits CVE-2026-24061 to bypass authentication → (3) Creates backdoor user `cleanupsvc` for persistent access → (4) Downloads `linper.sh` persistence script → (5) Locates and exfiltrates `credit-cards-25-blackfriday.db`. This demonstrates why legacy plaintext protocols like Telnet should never be exposed — every step is visible in the capture, but the damage is already done."
+        "description": "Identify the persistence script downloaded by the attacker",
+        "command": "Read the Telnet TCP stream — look for wget/curl commands",
+        "explanation": "In the session, the attacker downloads a script to maintain persistent access. Look for `wget` or `curl` commands in the stream. The script name suggests its purpose (Linux persistence).\n\n**Answer:** `linper.sh`"
+      },
+      {
+        "stepNumber": 6,
+        "description": "Determine what security defenses the persistence script checked",
+        "command": "Read the output of the persistence script execution in the stream",
+        "explanation": "After downloading and executing the persistence script, its output is visible in the plaintext Telnet stream. The script checks for host-based security controls — specifically a file integrity monitoring tool that could detect the attacker's modifications.\n\n**Answer:** Tripwire"
+      },
+      {
+        "stepNumber": 7,
+        "description": "Identify the data exfiltration method and timestamp",
+        "command": "Read the Telnet stream — look for data transfer commands",
+        "explanation": "The attacker uses Python's built-in HTTP server (`python3 -m http.server`) to serve files from the compromised host, then retrieves them from another machine. Look for the HTTP server command in the session and note its timestamp.\n\n**Answer:** `2026-01-27 10:49:54`"
+      },
+      {
+        "stepNumber": 8,
+        "description": "Extract the exfiltrated database and examine its contents",
+        "command": "File → Export Objects → HTTP → Save All, then: sqlite3 credit-cards-25-blackfriday.db",
+        "explanation": "The exfiltrated file is a SQLite database served via the Python HTTP server. Extract it using `File → Export Objects → HTTP → Save All`. Then open it locally:\n\n```bash\nsqlite3 credit-cards-25-blackfriday.db\n.tables\nSELECT COUNT(*) FROM <tablename>;\n```\n\nThis reveals the database contents — credit card records from a Black Friday sale. Count the records to answer the final question."
       }
     ]
   },
