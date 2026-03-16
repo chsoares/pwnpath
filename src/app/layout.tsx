@@ -60,7 +60,7 @@ export default function RootLayout({
         <footer className="border-t border-drac-border py-8 text-center text-xs text-drac-muted">
           <span className="text-drac-green">root@pwnpath</span>
           <span className="text-drac-muted">:~$ </span>
-          <span className="text-drac-fg/60">logout</span>
+          <span className="text-drac-fg/60">exit 0</span>
           <span className="text-drac-muted"> // </span>
           <span className="text-drac-fg/40">structured trails for HackTheBox</span>
         </footer>
