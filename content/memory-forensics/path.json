@@ -67,14 +67,6 @@
     },
     {
       "position": 9,
-      "challengeId": "constellation",
-      "name": "Constellation",
-      "difficulty": "medium",
-      "estimatedTime": "2-3 hours",
-      "keyTakeaway": "Memory-extracted URL analysis — combining OSINT with memory artifacts to trace data exfiltration and malicious entity connections"
-    },
-    {
-      "position": 10,
       "challengeId": "aptnightmare2",
       "name": "APTNightmare2",
       "difficulty": "hard",
@@ -82,7 +74,7 @@
       "keyTakeaway": "Linux rootkit detection — identifying kernel modules that unlist themselves, signal-based process hiding, and advanced evasion techniques"
     },
     {
-      "position": 11,
+      "position": 10,
       "challengeId": "lockpick3",
       "name": "Lockpick3.0",
       "difficulty": "hard",
@@ -90,7 +82,7 @@
       "keyTakeaway": "Linux Volatility 3 with custom symbols — building symbol tables for Ubuntu, ransomware incident investigation, and timeline correlation"
     },
     {
-      "position": 12,
+      "position": 11,
       "challengeId": "reflection",
       "name": "Reflection",
       "difficulty": "hard",

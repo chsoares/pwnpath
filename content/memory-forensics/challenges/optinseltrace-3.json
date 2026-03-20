@@ -8,7 +8,7 @@
   "keyTakeaway": "Multi-stage attack analysis — tracing a VBScript/PowerShell attack chain through memory, deobfuscating layered scripts, extracting shellcode, and identifying C2 infrastructure from process artifacts",
   "tags": ["Volatility 3", "deobfuscation", "VBScript", "PowerShell", "shellcode", "C2", "filescan", "handles"],
   "fundamentals": {
-    "content": "## Multi-Stage Attack Chain Analysis\n\n### Attack Stages in Memory\n\nSophisticated attacks rarely execute a single payload. Instead, they chain multiple stages:\n\n```\nStage 1: Initial access (phishing document, malicious link)\n  → Stage 2: Dropper (VBScript, PowerShell, HTA)\n    → Stage 3: Loader (shellcode, reflective DLL)\n      → Stage 4: C2 implant (beacon, reverse shell)\n```\n\nEach stage leaves artifacts in memory that can be traced with the right plugins.\n\n### VBScript and PowerShell Deobfuscation\n\nAttackers layer obfuscation to evade detection:\n\n**VBScript techniques:**\n- `Chr()` character codes instead of string literals\n- String concatenation: `\"pow\" & \"ersh\" & \"ell\"`\n- `Execute()` or `ExecuteGlobal()` for dynamic execution\n\n**PowerShell techniques:**\n- `-EncodedCommand` with Base64\n- `Invoke-Expression` (IEX) with string building\n- `[System.Convert]::FromBase64String()` for binary payloads\n- Environment variable concatenation: `$env:comspec[4,15,25]-join''`\n\n### Extracting Embedded Shellcode\n\nShellcode is raw machine code injected into process memory. To analyze it:\n1. Extract with `malfind` or `dumpfiles`\n2. Disassemble with `scdbg` or `objdump`\n3. Look for API hashing patterns, XOR decryption loops, and network connection setup\n4. Use `exiftool` on dumped files to check metadata for attribution clues",
+    "content": "## Multi-Stage Attack Chain Analysis\n\n### Attack Stages in Memory\n\nSophisticated attacks rarely execute a single payload. Instead, they chain multiple stages:\n\n```\nStage 1: Initial access (phishing document, malicious link)\n  → Stage 2: Dropper (VBScript, PowerShell, HTA)\n    → Stage 3: Loader (shellcode, reflective DLL)\n      → Stage 4: C2 implant (beacon, reverse shell)\n```\n\nEach stage leaves artifacts in memory that can be traced with the right plugins.\n\n### VBScript and PowerShell Deobfuscation\n\nAttackers layer obfuscation to evade detection:\n\n**VBScript techniques:**\n- `Chr()` character codes instead of string literals\n- String concatenation: `\"pow\" & \"ersh\" & \"ell\"`\n- `Execute()` or `ExecuteGlobal()` for dynamic execution\n\n**PowerShell techniques:**\n- `-EncodedCommand` with Base64\n- `Invoke-Expression` (IEX) with string building\n- `[System.Convert]::FromBase64String()` for binary payloads\n- Environment variable concatenation: `$env:comspec[4,15,25]-join''`\n\n### Extracting Embedded Shellcode\n\nShellcode is raw machine code injected into process memory. To analyze it:\n1. Extract with `malfind` or `dumpfiles`\n2. Disassemble with `scdbg` or `objdump`\n3. Look for API hashing patterns, XOR decryption loops, and network connection setup\n4. Check dumped files for attribution clues (strings, metadata)",
     "toolReferences": [
       {
         "tool": "Volatility 3",
@@ -23,7 +23,6 @@
       {
         "tool": "Analysis tools",
         "commands": [
-          "exiftool dumped_file.exe (check metadata and timestamps)",
           "scdbg /f shellcode.bin (emulate shellcode)",
           "CyberChef: From Base64 → XOR → deobfuscate payload"
         ]
@@ -38,7 +37,7 @@
       "The VBScript likely spawns PowerShell — use psscan (not just pslist) to find even terminated PowerShell processes.",
       "Use handles to see what files and registry keys a process had open. This reveals what the malware was accessing.",
       "The PowerShell stage contains a Base64-encoded payload that decodes to shellcode or a next-stage loader.",
-      "Use exiftool on dumped executables to check compilation timestamps, author metadata, and other attribution clues.",
+      "Check dumped files with strings for embedded URLs, IPs, or configuration data. Event logs (analyzable with Chainsaw) complement the memory evidence.",
       "The final stage connects to a C2 server — check netscan output and decoded script contents for IP addresses and domains."
     ]
   },
@@ -83,9 +82,9 @@
       },
       {
         "stepNumber": 7,
-        "description": "Check dumped files with exiftool",
-        "command": "exiftool dumped_executable.exe",
-        "explanation": "Examine metadata of any dumped executables. Compilation timestamps, author fields, and internal names provide attribution clues and help identify the specific malware variant."
+        "description": "Correlate with event logs",
+        "command": "chainsaw hunt evtx_logs/ -s sigma/ --mapping mappings/sigma-event-logs-all.yml",
+        "explanation": "This challenge also involves Windows event logs. Use Chainsaw with Sigma rules to detect suspicious PowerShell execution, scheduled tasks, or service installations that complement the memory-based attack chain analysis."
       }
     ]
   },

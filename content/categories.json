@@ -15,7 +15,7 @@
       "description": "Analyze volatile memory dumps using Volatility to uncover running processes, injected code, network connections, and evidence of compromise.",
       "icon": "memory",
       "status": "available",
-      "challengeCount": 12,
+      "challengeCount": 11,
       "focus": ["Volatility", "Process Analysis", "Memory Artifacts"]
     },
     {

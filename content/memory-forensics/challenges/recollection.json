@@ -32,7 +32,7 @@
   },
   "hints": {
     "hints": [
-      "This Sherlock has 15 questions covering many artifact types — plan to use at least 8-10 different Volatility plugins.",
+      "This Sherlock has 18 tasks covering many artifact types — plan to use at least 8-10 different Volatility plugins.",
       "Use windows.cmdline to extract command-line arguments for all processes. Look for PowerShell invocations with encoded parameters.",
       "windows.netscan shows network connections. Look for connections to unusual external IPs or known malicious ports.",
       "Use windows.registry.printkey to examine specific registry hives — Run keys reveal persistence mechanisms.",
@@ -42,7 +42,7 @@
     ]
   },
   "solution": {
-    "content": "## Full Walkthrough\n\n**Scenario:** A Windows 7 SP1 x64 system was compromised. You are given a memory dump and must answer 15 questions covering the full scope of the investigation — from initial access to persistence and data exfiltration.\n\n**Key Artifacts:**\n- Windows 7 SP1 x64 memory dump\n- Multiple artifact types to extract and correlate",
+    "content": "## Full Walkthrough\n\n**Scenario:** A Windows 7 SP1 x64 system was compromised. You are given a memory dump and must answer 18 tasks covering the full scope of the investigation — from initial access to persistence and data exfiltration.\n\n**Key Artifacts:**\n- Windows 7 SP1 x64 memory dump\n- Multiple artifact types to extract and correlate",
     "steps": [
       {
         "stepNumber": 1,
@@ -81,7 +81,7 @@
         "explanation": "Extract the browser history database from memory and query it with sqlite3. The browsing history reveals sites visited by the attacker, including potential tool downloads and C2 infrastructure."
       },
       {
-        "stepNumber": 8,
+        "stepNumber": 7,
         "description": "Deobfuscate PowerShell commands",
         "command": "CyberChef: From Base64 → decode payload found in cmdscan output",
         "explanation": "Take any Base64-encoded PowerShell commands found in earlier steps and decode them using CyberChef. The decoded content reveals the actual malicious operations: download cradles, reverse shells, or data exfiltration commands."
